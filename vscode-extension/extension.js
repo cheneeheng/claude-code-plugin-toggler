@@ -12,14 +12,22 @@ const INSTALLED_PLUGINS_PATH = path.join(
 
 function loadInstalledPlugins() {
   if (!fs.existsSync(INSTALLED_PLUGINS_PATH)) return null;
-  const data = JSON.parse(fs.readFileSync(INSTALLED_PLUGINS_PATH, "utf8"));
-  return data.plugins || [];
+  try {
+    const data = JSON.parse(fs.readFileSync(INSTALLED_PLUGINS_PATH, "utf8"));
+    return data.plugins || [];
+  } catch (e) {
+    throw new Error(`Failed to parse ${INSTALLED_PLUGINS_PATH}: ${e.message}`);
+  }
 }
 
 function loadSettingsLocal(projectRoot) {
   const p = path.join(projectRoot, ".claude", "settings.local.json");
   if (!fs.existsSync(p)) return {};
-  return JSON.parse(fs.readFileSync(p, "utf8"));
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch (e) {
+    throw new Error(`Failed to parse ${p}: ${e.message}`);
+  }
 }
 
 function saveSettingsLocal(projectRoot, settings) {
@@ -82,19 +90,23 @@ class SkillsPanel {
       return;
     }
 
-    let pluginIds = loadInstalledPlugins();
-    const mock = pluginIds === null;
-    if (mock) pluginIds = MOCK_PLUGINS;
+    try {
+      let pluginIds = loadInstalledPlugins();
+      const mock = pluginIds === null;
+      if (mock) pluginIds = MOCK_PLUGINS;
 
-    const settings = loadSettingsLocal(projectRoot);
-    const plugins = mergePlugins(pluginIds, settings);
+      const settings = loadSettingsLocal(projectRoot);
+      const plugins = mergePlugins(pluginIds, settings);
 
-    this._panel.webview.postMessage({
-      type: "load",
-      plugins,
-      projectRoot,
-      mock,
-    });
+      this._panel.webview.postMessage({
+        type: "load",
+        plugins,
+        projectRoot,
+        mock,
+      });
+    } catch (e) {
+      this._panel.webview.postMessage({ type: "error", message: e.message });
+    }
   }
 
   async _onMessage(msg) {

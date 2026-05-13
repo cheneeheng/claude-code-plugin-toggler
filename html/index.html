@@ -192,8 +192,11 @@
       showStatus("Loading plugins...");
       try {
         const res = await fetch("/api/plugins");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        if (!res.ok) {
+          const pathInfo = data.path ? ` (${data.path})` : "";
+          throw new Error(`${data.error || `HTTP ${res.status}`}${pathInfo}`);
+        }
 
         document.getElementById("project-path").textContent = data.project_root || "";
         if (data.mock) {

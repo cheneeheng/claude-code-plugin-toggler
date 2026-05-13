@@ -13,8 +13,11 @@ PROJECT_ROOT = Path(os.getcwd())
 def load_installed_plugins():
     if not INSTALLED_PLUGINS_PATH.exists():
         return None  # signals mock data
-    with open(INSTALLED_PLUGINS_PATH) as f:
-        data = json.load(f)
+    try:
+        with open(INSTALLED_PLUGINS_PATH) as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(str(INSTALLED_PLUGINS_PATH)) from e
     return data.get("plugins", [])
 
 
@@ -22,8 +25,11 @@ def load_settings_local(project_root: Path) -> dict:
     path = project_root / ".claude" / "settings.local.json"
     if not path.exists():
         return {}
-    with open(path) as f:
-        return json.load(f)
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(str(path)) from e
 
 
 def save_settings_local(project_root: Path, settings: dict):
@@ -88,11 +94,19 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
 
         elif self.path == "/api/plugins":
-            plugin_ids = load_installed_plugins()
-            mock = plugin_ids is None
-            if mock:
-                plugin_ids = MOCK_PLUGINS
-            settings = load_settings_local(PROJECT_ROOT)
+            try:
+                plugin_ids = load_installed_plugins()
+                mock = plugin_ids is None
+                if mock:
+                    plugin_ids = MOCK_PLUGINS
+                settings = load_settings_local(PROJECT_ROOT)
+            except ValueError as exc:
+                failed_path = str(exc)
+                self._send_json(
+                    {"error": f"Failed to parse {failed_path}", "path": failed_path},
+                    500,
+                )
+                return
             plugins = merge(plugin_ids, settings)
             payload = {
                 "plugins": plugins,
