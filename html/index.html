@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Code Plugin Toggler</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    header {
+      margin-bottom: 1.5rem;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #f0f6fc;
+    }
+
+    .project-path {
+      font-size: 0.75rem;
+      color: #8b949e;
+      margin-top: 0.25rem;
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+
+    .mock-banner {
+      background: #3d2b00;
+      border: 1px solid #9a6700;
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8rem;
+      color: #e3b341;
+      margin-bottom: 1rem;
+      display: none;
+    }
+
+    .status {
+      color: #8b949e;
+      font-size: 0.9rem;
+      padding: 1rem 0;
+    }
+
+    .error-msg {
+      color: #f85149;
+      font-size: 0.9rem;
+      padding: 1rem 0;
+    }
+
+    .plugin-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .plugin-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+    }
+
+    .plugin-info {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .plugin-name {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #f0f6fc;
+    }
+
+    .marketplace-badge {
+      font-size: 0.7rem;
+      color: #8b949e;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 0.1rem 0.4rem;
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+
+    /* Toggle switch */
+    .toggle-wrap {
+      display: flex;
+      align-items: center;
+    }
+
+    .toggle {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 36px;
+      height: 20px;
+      background: #30363d;
+      border-radius: 10px;
+      cursor: pointer;
+      position: relative;
+      transition: background 0.15s;
+    }
+
+    .toggle::after {
+      content: "";
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background: #e6edf3;
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: left 0.15s;
+    }
+
+    .toggle:checked {
+      background: #238636;
+    }
+
+    .toggle:checked::after {
+      left: 19px;
+    }
+
+    .toggle:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .bulk-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    button {
+      background: #21262d;
+      color: #e6edf3;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 0.4rem 0.9rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    button:hover {
+      background: #30363d;
+      border-color: #8b949e;
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Claude Code Plugin Toggler</h1>
+    <div class="project-path" id="project-path"></div>
+  </header>
+
+  <div class="mock-banner" id="mock-banner">
+    Mock data — <code>~/.claude/plugins/installed_plugins.json</code> not found.
+    Install plugins to see real data.
+  </div>
+
+  <div id="status" class="status">Loading plugins...</div>
+  <div id="error" class="error-msg" style="display:none"></div>
+
+  <div class="plugin-list" id="plugin-list" style="display:none"></div>
+
+  <div class="bulk-actions" id="bulk-actions" style="display:none">
+    <button id="btn-enable-all">Enable all</button>
+    <button id="btn-disable-all">Disable all</button>
+  </div>
+
+  <script>
+    let plugins = [];
+
+    async function load() {
+      showStatus("Loading plugins...");
+      try {
+        const res = await fetch("/api/plugins");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        document.getElementById("project-path").textContent = data.project_root || "";
+        if (data.mock) {
+          document.getElementById("mock-banner").style.display = "block";
+        }
+
+        plugins = data.plugins || [];
+        renderPlugins();
+      } catch (err) {
+        showError(`Failed to load plugins: ${err.message}`);
+      }
+    }
+
+    function renderPlugins() {
+      const list = document.getElementById("plugin-list");
+      const status = document.getElementById("status");
+      const bulk = document.getElementById("bulk-actions");
+
+      if (plugins.length === 0) {
+        showStatus('No plugins installed. Install plugins to <code>~/.claude/plugins/</code>.');
+        list.style.display = "none";
+        bulk.style.display = "none";
+        return;
+      }
+
+      status.style.display = "none";
+      list.style.display = "flex";
+      bulk.style.display = "flex";
+
+      list.innerHTML = plugins.map((p) => `
+        <div class="plugin-row" data-id="${esc(p.id)}">
+          <div class="plugin-info">
+            <span class="plugin-name">${esc(p.name)}</span>
+            ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
+          </div>
+          <div class="toggle-wrap">
+            <input type="checkbox" class="toggle" data-id="${esc(p.id)}"
+              ${p.enabled ? "checked" : ""} />
+          </div>
+        </div>
+      `).join("");
+
+      list.querySelectorAll(".toggle").forEach((el) => {
+        el.addEventListener("change", (e) => toggle(e.target.dataset.id, e.target.checked, e.target));
+      });
+    }
+
+    async function toggle(id, enabled, el) {
+      el.disabled = true;
+      const prev = !enabled;
+      // optimistic update
+      const p = plugins.find((x) => x.id === id);
+      if (p) p.enabled = enabled;
+
+      try {
+        const res = await fetch("/api/toggle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, enabled }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      } catch (err) {
+        // revert
+        if (p) p.enabled = prev;
+        el.checked = prev;
+        showError(`Toggle failed: ${err.message}`);
+      } finally {
+        el.disabled = false;
+      }
+    }
+
+    async function bulkToggle(enabled) {
+      const buttons = document.querySelectorAll(".bulk-actions button");
+      buttons.forEach((b) => (b.disabled = true));
+      for (const p of plugins) {
+        if (p.enabled !== enabled) {
+          const el = document.querySelector(`.toggle[data-id="${esc(p.id)}"]`);
+          if (el) await toggle(p.id, enabled, el);
+        }
+      }
+      buttons.forEach((b) => (b.disabled = false));
+      renderPlugins();
+    }
+
+    function showStatus(html) {
+      const s = document.getElementById("status");
+      s.innerHTML = html;
+      s.style.display = "block";
+      document.getElementById("error").style.display = "none";
+    }
+
+    function showError(msg) {
+      const e = document.getElementById("error");
+      e.textContent = msg;
+      e.style.display = "block";
+      document.getElementById("status").style.display = "none";
+    }
+
+    function esc(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    document.getElementById("btn-enable-all").addEventListener("click", () => bulkToggle(true));
+    document.getElementById("btn-disable-all").addEventListener("click", () => bulkToggle(false));
+
+    load();
+  </script>
+</body>
+</html>
