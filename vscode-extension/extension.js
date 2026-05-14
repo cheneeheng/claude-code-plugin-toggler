@@ -43,41 +43,40 @@ function mergePlugins(pluginIds, settings) {
   const enabledMap = settings.enabledPlugins || {};
   return pluginIds.map((id) => {
     const [name, marketplace = ""] = id.split("@");
-    return { id, name, marketplace, enabled: enabledMap[id] === true };
+    const inLocal = id in enabledMap;
+    return {
+      id,
+      name,
+      marketplace,
+      // Inherited plugins default to enabled until a global settings file says otherwise.
+      enabled: inLocal ? enabledMap[id] === true : true,
+      scope: inLocal ? "local" : "inherited",
+    };
   });
 }
 
 const MOCK_PLUGINS = ["frontend-design@anthropic", "docx@anthropic"];
 
-class SkillsPanel {
-  constructor(context) {
-    this._panel = vscode.window.createWebviewPanel(
-      "skillsPanel",
-      "Claude Code Plugin Toggler",
-      vscode.ViewColumn.One,
-      { enableScripts: true }
-    );
+class SkillsViewProvider {
+  static viewType = "skillsToggle.pluginList";
 
-    const panelHtml = path.join(
-      context.extensionPath,
-      "webview",
-      "panel.html"
-    );
-    this._panel.webview.html = fs.readFileSync(panelHtml, "utf8");
+  constructor(extensionUri) {
+    this._extensionUri = extensionUri;
+  }
 
-    this._panel.webview.onDidReceiveMessage(
-      (msg) => this._onMessage(msg),
-      undefined,
-      context.subscriptions
+  resolveWebviewView(webviewView) {
+    const stylesUri = webviewView.webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, "webview", "styles.css")
     );
-
-    this._panel.onDidChangeViewState(
-      ({ webviewPanel }) => { if (webviewPanel.visible) this._refresh(); },
-      undefined,
-      context.subscriptions
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, "webview")],
+    };
+    webviewView.webview.html = this._getHtml(webviewView.webview, stylesUri);
+    this._refresh(webviewView.webview);
+    webviewView.webview.onDidReceiveMessage((msg) =>
+      this._onMessage(webviewView.webview, msg)
     );
-
-    this._refresh();
   }
 
   _projectRoot() {
@@ -86,55 +85,70 @@ class SkillsPanel {
     return folders[0].uri.fsPath;
   }
 
-  _refresh() {
+  _refresh(webview) {
     const projectRoot = this._projectRoot();
     if (!projectRoot) {
-      this._panel.webview.postMessage({
-        type: "error",
-        message: "No workspace folder open.",
-      });
+      webview.postMessage({ type: "error", message: "No workspace folder open." });
       return;
     }
-
     try {
       let pluginIds = loadInstalledPlugins();
       const mock = pluginIds === null;
       if (mock) pluginIds = MOCK_PLUGINS;
-
       const settings = loadSettingsLocal(projectRoot);
       const plugins = mergePlugins(pluginIds, settings);
-
-      this._panel.webview.postMessage({
-        type: "load",
-        plugins,
-        projectRoot,
-        mock,
-      });
+      webview.postMessage({ type: "load", plugins, projectRoot, mock });
     } catch (e) {
-      this._panel.webview.postMessage({ type: "error", message: e.message });
+      webview.postMessage({ type: "error", message: e.message });
     }
   }
 
-  _onMessage(msg) {
+  async _onMessage(webview, msg) {
     if (msg.type !== "toggle") return;
 
     const { id, enabled } = msg;
     const projectRoot = this._projectRoot();
-    if (projectRoot) {
-      const settings = loadSettingsLocal(projectRoot);
-      if (!settings.enabledPlugins) settings.enabledPlugins = {};
-      settings.enabledPlugins[id] = enabled;
-      saveSettingsLocal(projectRoot, settings);
+    if (!projectRoot) return;
+
+    const label = enabled ? "enable" : "disable";
+    const answer = await vscode.window.showWarningMessage(
+      `Pin "${id}" to local settings? (${label})`,
+      "Yes",
+      "No"
+    );
+
+    if (answer !== "Yes") {
+      // Re-send current state to reset the webview toggle.
+      this._refresh(webview);
+      return;
     }
-    this._refresh();
+
+    const settings = loadSettingsLocal(projectRoot);
+    if (!settings.enabledPlugins) settings.enabledPlugins = {};
+    settings.enabledPlugins[id] = enabled;
+    saveSettingsLocal(projectRoot, settings);
+    this._refresh(webview);
+  }
+
+  _getHtml(webview, stylesUri) {
+    const panelHtmlPath = vscode.Uri.joinPath(
+      this._extensionUri,
+      "webview",
+      "panel.html"
+    );
+    let html = fs.readFileSync(panelHtmlPath.fsPath, "utf8");
+    // Inject the resolved styles URI in place of the placeholder.
+    html = html.replace("__STYLES_URI__", stylesUri.toString());
+    return html;
   }
 }
 
 function activate(context) {
+  const provider = new SkillsViewProvider(context.extensionUri);
   context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "claude-code-plugin-toggler.manage",
-      () => new SkillsPanel(context)
+    vscode.window.registerWebviewViewProvider(
+      SkillsViewProvider.viewType,
+      provider
     )
   );
 }

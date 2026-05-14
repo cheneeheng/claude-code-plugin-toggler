@@ -5,9 +5,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 INSTALLED_PLUGINS_PATH = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-SETTINGS_LOCAL_PATH = ".claude" / Path("settings.local.json")
 
-PROJECT_ROOT = Path(os.getcwd())
+MOCK_PLUGINS = ["frontend-design@anthropic", "docx@anthropic"]
 
 
 def load_installed_plugins() -> list[str] | None:
@@ -47,16 +46,22 @@ def merge(plugin_ids: list[str], settings: dict[str, object]) -> list[dict[str, 
         parts = pid.split("@", 1)
         name = parts[0]
         marketplace = parts[1] if len(parts) > 1 else ""
+        in_local = pid in enabled_map
         result.append({
             "id": pid,
             "name": name,
             "marketplace": marketplace,
-            "enabled": enabled_map.get(pid, False),
+            # Inherited plugins default to enabled until a global settings file says otherwise.
+            "enabled": enabled_map.get(pid, True),
+            "scope": "local" if in_local else "inherited",
         })
     return result
 
 
-MOCK_PLUGINS = ["frontend-design@anthropic", "docx@anthropic"]
+class PluginServer(HTTPServer):
+    def __init__(self, server_address, RequestHandlerClass, project_root: Path):
+        super().__init__(server_address, RequestHandlerClass)
+        self.project_root = project_root
 
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -76,6 +81,19 @@ class RequestHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         return json.loads(self.rfile.read(length))
 
+    def _serve_file(self, filename: str, content_type: str):
+        path = Path(__file__).parent / filename
+        if not path.exists():
+            self.send_response(404)
+            self.end_headers()
+            return
+        body = path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "http://localhost")
@@ -85,21 +103,19 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/":
-            index = Path(__file__).parent / "index.html"
-            body = index.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            self._serve_file("index.html", "text/html")
+
+        elif self.path == "/styles.css":
+            self._serve_file("styles.css", "text/css")
 
         elif self.path == "/api/plugins":
+            project_root = self.server.project_root
             try:
                 plugin_ids = load_installed_plugins()
                 mock = plugin_ids is None
                 if mock:
                     plugin_ids = MOCK_PLUGINS
-                settings = load_settings_local(PROJECT_ROOT)
+                settings = load_settings_local(project_root)
             except ValueError as exc:
                 failed_path = str(exc)
                 self._send_json(
@@ -110,7 +126,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             plugins = merge(plugin_ids, settings)
             payload = {
                 "plugins": plugins,
-                "project_root": str(PROJECT_ROOT),
+                "project_root": str(project_root),
             }
             if mock:
                 payload["mock"] = True
@@ -128,12 +144,25 @@ class RequestHandler(BaseHTTPRequestHandler):
             if not isinstance(plugin_id, str) or not isinstance(enabled, bool):
                 self._send_json({"ok": False, "error": "invalid payload"}, 400)
                 return
-            settings = load_settings_local(PROJECT_ROOT)
+            project_root = self.server.project_root
+            settings = load_settings_local(project_root)
             if "enabledPlugins" not in settings:
                 settings["enabledPlugins"] = {}
             settings["enabledPlugins"][plugin_id] = enabled
-            save_settings_local(PROJECT_ROOT, settings)
+            save_settings_local(project_root, settings)
             self._send_json({"ok": True})
+
+        elif self.path == "/api/set-project":
+            body = self._read_body()
+            path_str = body.get("path", "")
+            if not os.path.isdir(path_str):
+                self._send_json(
+                    {"ok": False, "error": f"Path does not exist: {path_str}"}, 400
+                )
+                return
+            self.server.project_root = Path(path_str)
+            self._send_json({"ok": True, "project_root": path_str})
+
         else:
             self.send_response(404)
             self.end_headers()
@@ -141,6 +170,7 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 7779
-    server = HTTPServer(("127.0.0.1", port), RequestHandler)
-    print(f"Serving at http://127.0.0.1:{port}  (project root: {PROJECT_ROOT})")
+    project_root = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(os.getcwd())
+    server = PluginServer(("127.0.0.1", port), RequestHandler, project_root)
+    print(f"Serving at http://127.0.0.1:{port}  (project root: {project_root})")
     server.serve_forever()
