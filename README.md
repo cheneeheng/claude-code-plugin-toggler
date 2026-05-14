@@ -38,7 +38,7 @@ To stop the server, click **Stop server** in the top-right of the UI or kill the
 
 1. Open `vscode-extension/` in VSCode.
 2. Press `F5` to launch the Extension Development Host.
-3. Run **Skills: Manage Plugins** from the command palette.
+3. Click the **Skills Toggle** icon in the activity bar to open the sidebar panel.
 
 To install locally:
 
@@ -53,7 +53,7 @@ Then install the `.vsix` via **Extensions: Install from VSIX...**.
 
 **`~/.claude/plugins/installed_plugins.json`**
 ```json
-{ "plugins": ["frontend-design@anthropic", "docx@anthropic"] }
+{ "plugins": { "frontend-design@anthropic": {}, "docx@anthropic": {} } }
 ```
 
 **`.claude/settings.local.json`** (written by this tool)
@@ -62,6 +62,23 @@ Then install the `.vsix` via **Extensions: Install from VSIX...**.
 ```
 
 Plugin ID format: `name@marketplace`.
+
+**Plugin skills** are read from disk at load time:
+
+```
+~/.claude/plugins/marketplaces/<marketplace>/<name>/skills/<skill-dir>/SKILL.md
+```
+
+Each `SKILL.md` uses YAML front matter with `name` and `description` keys. The UI renders a collapsible skill count per plugin row. If the skills directory is absent the disclosure is omitted.
+
+## UI behaviour
+
+Plugins are split into two sections:
+
+- **Local** — plugins with a per-project override in `.claude/settings.local.json`. These have an enable/disable toggle.
+- **Inherited** — plugins with no local override, shown as always-enabled. Click **Localize** to pin the current state into the local settings file before toggling.
+
+Bulk **Enable all** / **Disable all** actions apply only to locally-pinned plugins.
 
 ## Requirements
 

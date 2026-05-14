@@ -14,7 +14,11 @@ function loadInstalledPlugins() {
   if (!fs.existsSync(INSTALLED_PLUGINS_PATH)) return null;
   try {
     const data = JSON.parse(fs.readFileSync(INSTALLED_PLUGINS_PATH, "utf8"));
-    return Object.keys(data.plugins || {});
+    const result = {};
+    for (const [id, records] of Object.entries(data.plugins || {})) {
+      result[id] = Array.isArray(records) && records.length > 0 ? (records[0].installPath || "") : "";
+    }
+    return result;
   } catch (e) {
     throw new Error(`Failed to parse ${INSTALLED_PLUGINS_PATH}: ${e.message}`);
   }
@@ -92,9 +96,13 @@ function parseSkillFrontmatter(text, fallbackName) {
   return { name, description };
 }
 
-function loadPluginSkills(pluginId) {
-  const [pluginName, marketplace] = pluginId.split("@");
-  const skillsDir = path.join(os.homedir(), ".claude", "plugins", "marketplaces", marketplace, pluginName, "skills");
+function loadPluginSkills(pluginId, installPath) {
+  const skillsDir = installPath
+    ? path.join(installPath, "skills")
+    : (() => {
+        const [pluginName, marketplace] = pluginId.split("@");
+        return path.join(os.homedir(), ".claude", "plugins", "marketplaces", marketplace, pluginName, "skills");
+      })();
   if (!fs.existsSync(skillsDir)) return [];
 
   return fs
@@ -150,15 +158,16 @@ class SkillsViewProvider {
       return;
     }
     try {
-      let pluginIds = loadInstalledPlugins();
-      const mock = pluginIds === null;
-      if (mock) pluginIds = MOCK_PLUGINS;
+      let pluginsMap = loadInstalledPlugins();
+      const mock = pluginsMap === null;
+      if (mock) pluginsMap = Object.fromEntries(MOCK_PLUGINS.map((p) => [p, ""]));
       const settings = loadSettingsLocal(projectRoot);
-      const plugins = mergePlugins(pluginIds, settings);
+      const plugins = mergePlugins(Object.keys(pluginsMap), settings);
       for (const p of plugins) {
+        const installPath = mock ? "" : (pluginsMap[p.id] || "");
         p.skills = mock && MOCK_PLUGIN_SKILLS[p.id]
           ? MOCK_PLUGIN_SKILLS[p.id]
-          : loadPluginSkills(p.id);
+          : loadPluginSkills(p.id, installPath);
       }
       webview.postMessage({ type: "load", plugins, projectRoot, mock });
     } catch (e) {
@@ -166,25 +175,12 @@ class SkillsViewProvider {
     }
   }
 
-  async _onMessage(webview, msg) {
+  _onMessage(webview, msg) {
     if (msg.type !== "toggle") return;
 
     const { id, enabled } = msg;
     const projectRoot = this._projectRoot();
     if (!projectRoot) return;
-
-    const label = enabled ? "enable" : "disable";
-    const answer = await vscode.window.showWarningMessage(
-      `Pin "${id}" to local settings? (${label})`,
-      "Yes",
-      "No"
-    );
-
-    if (answer !== "Yes") {
-      // Re-send current state to reset the webview toggle.
-      this._refresh(webview);
-      return;
-    }
 
     const settings = loadSettingsLocal(projectRoot);
     if (!settings.enabledPlugins) settings.enabledPlugins = {};

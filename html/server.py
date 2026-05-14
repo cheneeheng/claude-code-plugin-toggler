@@ -53,14 +53,17 @@ def _parse_skill_frontmatter(path: Path) -> tuple[str, str]:
         return fallback, ""
 
 
-def load_plugin_skills(plugin_id: str) -> list[dict[str, str]]:
+def load_plugin_skills(plugin_id: str, install_path: str = "") -> list[dict[str, str]]:
     """
     Returns a list of {"name": str, "description": str} dicts.
-    Directory: ~/.claude/plugins/marketplaces/<marketplace>/<name>/skills/
-    Each skill is a subdirectory; metadata is read from SKILL.md inside it.
+    Prefers install_path/skills/ (from installed_plugins.json) so the path is
+    marketplace-agnostic. Falls back to marketplaces/<marketplace>/<name>/skills/.
     """
-    plugin_name, marketplace = plugin_id.split("@", 1)
-    skills_dir = PLUGINS_DIR / marketplace / plugin_name / "skills"
+    if install_path:
+        skills_dir = Path(install_path) / "skills"
+    else:
+        plugin_name, marketplace = plugin_id.split("@", 1)
+        skills_dir = PLUGINS_DIR / marketplace / plugin_name / "skills"
     if not skills_dir.is_dir():
         return []
     skills = []
@@ -71,15 +74,22 @@ def load_plugin_skills(plugin_id: str) -> list[dict[str, str]]:
     return skills
 
 
-def load_installed_plugins() -> list[str] | None:
+def load_installed_plugins() -> dict[str, str] | None:
+    """Returns {plugin_id: install_path} or None to signal mock mode."""
     if not INSTALLED_PLUGINS_PATH.exists():
-        return None  # signals mock data
+        return None
     try:
         with open(INSTALLED_PLUGINS_PATH) as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
         raise ValueError(str(INSTALLED_PLUGINS_PATH)) from e
-    return list(data.get("plugins", {}).keys())
+    result: dict[str, str] = {}
+    for plugin_id, records in data.get("plugins", {}).items():
+        install_path = ""
+        if isinstance(records, list) and records:
+            install_path = records[0].get("installPath", "")
+        result[plugin_id] = install_path
+    return result
 
 
 def load_settings_local(project_root: Path) -> dict[str, object]:
@@ -102,13 +112,13 @@ def save_settings_local(project_root: Path, settings: dict[str, object]) -> None
 
 
 def merge(
-    plugin_ids: list[str],
+    plugins_map: dict[str, str],
     settings: dict[str, object],
     skill_overrides: dict[str, list] | None = None,
 ) -> list[dict[str, object]]:
     enabled_map = settings.get("enabledPlugins", {})
     result = []
-    for pid in plugin_ids:
+    for pid, install_path in plugins_map.items():
         parts = pid.split("@", 1)
         name = parts[0]
         marketplace = parts[1] if len(parts) > 1 else ""
@@ -116,7 +126,7 @@ def merge(
         if skill_overrides is not None and pid in skill_overrides:
             skills = skill_overrides[pid]
         else:
-            skills = load_plugin_skills(pid)
+            skills = load_plugin_skills(pid, install_path)
         result.append({
             "id": pid,
             "name": name,
@@ -182,10 +192,10 @@ class RequestHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/plugins":
             project_root = self.server.project_root
             try:
-                plugin_ids = load_installed_plugins()
-                mock = plugin_ids is None
+                plugins_map = load_installed_plugins()
+                mock = plugins_map is None
                 if mock:
-                    plugin_ids = MOCK_PLUGINS
+                    plugins_map = {p: "" for p in MOCK_PLUGINS}
                 settings = load_settings_local(project_root)
             except ValueError as exc:
                 failed_path = str(exc)
@@ -194,7 +204,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     500,
                 )
                 return
-            plugins = merge(plugin_ids, settings, skill_overrides=MOCK_PLUGIN_SKILLS if mock else None)
+            plugins = merge(plugins_map, settings, skill_overrides=MOCK_PLUGIN_SKILLS if mock else None)
             payload = {
                 "plugins": plugins,
                 "project_root": str(project_root),
