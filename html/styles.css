@@ -323,3 +323,44 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   border-color: #e05c5c;
   color: #e05c5c;
 }
+
+/* --- SkillsDisclosure --- */
+.skills-disclosure {
+  margin-top: 6px;
+}
+
+.skills-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0;
+}
+
+.skills-list {
+  display: none;
+  margin-top: 6px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+
+.skills-list.is-open {
+  display: block;
+}
+
+.skill-row {
+  padding: 4px 0;
+}
+
+.skill-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.skill-description {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  margin-top: 1px;
+}

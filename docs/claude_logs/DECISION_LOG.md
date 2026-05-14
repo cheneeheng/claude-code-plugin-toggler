@@ -47,6 +47,21 @@
 
 ---
 
+### Entry 005
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-05-14T00:00:00Z
+**Task:** ITER_02 — Mock plugin skills injection
+
+**Context:** ITER_02 §04 specifies that mock plugin dicts should include a `skills` key so the collapsible UI is exercised during development. However, `MOCK_PLUGINS` in both `server.py` and `extension.js` is a flat list of string IDs, not a list of dicts — the `merge()` functions construct dicts. The plan's mock skill note does not account for this structure.
+**Decision / Action:** Added a separate `MOCK_PLUGIN_SKILLS` dict (keyed by plugin ID) in both files. Updated `merge()` in `server.py` to accept an optional `skill_overrides` parameter; the API handler passes `MOCK_PLUGIN_SKILLS` when `mock=True`. In `extension.js`, `_refresh()` checks `mock && MOCK_PLUGIN_SKILLS[p.id]` before calling `loadPluginSkills()`.
+**Rationale:** Avoids restructuring the existing flat `MOCK_PLUGINS` list. Keeps mock skill injection explicit and isolated from the real `load_plugin_skills()` path.
+**Impact / Risk:** None. Mock skills are only injected when `installed_plugins.json` is absent.
+**Outcome:** Both surfaces show "1 skill ▸" per mock plugin in development mode.
+
+---
+
 ### Entry 004
 
 **Type:** Decision

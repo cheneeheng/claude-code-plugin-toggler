@@ -104,12 +104,38 @@
       });
     }
 
+    function renderSkillsDisclosure(skills) {
+      if (!skills || skills.length === 0) return "";
+      const skillRows = skills.map((s) => `
+        <div class="skill-row">
+          <div class="skill-name">${esc(s.name)}</div>
+          ${s.description ? `<div class="skill-description">${esc(s.description)}</div>` : ""}
+        </div>`).join("");
+      return `
+        <div class="skills-disclosure">
+          <button class="skills-toggle-btn" onclick="toggleSkills(this)">
+            ${skills.length} skill${skills.length !== 1 ? "s" : ""} &#9658;
+          </button>
+          <div class="skills-list">
+            ${skillRows}
+          </div>
+        </div>`;
+    }
+
+    function toggleSkills(btn) {
+      const list = btn.nextElementSibling;
+      const open = list.classList.toggle("is-open");
+      const count = list.querySelectorAll(".skill-row").length;
+      btn.textContent = `${count} skill${count !== 1 ? "s" : ""} ${open ? "▾" : "▸"}`;
+    }
+
     function localRowHtml(p) {
       return `
         <div class="plugin-row" data-id="${esc(p.id)}">
           <div class="plugin-info">
             <span class="plugin-name">${esc(p.name)}</span>
             ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
+            ${renderSkillsDisclosure(p.skills)}
           </div>
           <div class="toggle-wrap">
             <input type="checkbox" class="toggle" data-id="${esc(p.id)}"
@@ -124,6 +150,7 @@
           <div class="plugin-info">
             <span class="plugin-name">${esc(p.name)}</span>
             ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
+            ${renderSkillsDisclosure(p.skills)}
           </div>
           <div class="row-actions">
             <button class="override-btn" data-id="${esc(p.id)}">Localize</button>

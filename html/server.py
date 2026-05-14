@@ -1,13 +1,72 @@
 import json
 import os
+import re
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 INSTALLED_PLUGINS_PATH = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+PLUGINS_DIR = Path.home() / ".claude" / "plugins"
 
 MOCK_PLUGINS = ["frontend-design@anthropic", "docx@anthropic"]
+
+MOCK_PLUGIN_SKILLS = {
+    "frontend-design@anthropic": [
+        {"name": "mock-skill", "description": "Placeholder skill for development."}
+    ],
+    "docx@anthropic": [
+        {"name": "mock-skill", "description": "Placeholder skill for development."}
+    ],
+}
+
+
+def _parse_skill_frontmatter(path: Path) -> tuple[str, str]:
+    """
+    Returns (name, description) from YAML front matter.
+    Uses regex — no PyYAML dependency.
+    Falls back to (stem, "") if front matter is absent or keys are missing.
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
+        if not m:
+            return path.stem, ""
+        fm = m.group(1)
+
+        name_match = re.search(r"^name:\s*(.+)$", fm, re.MULTILINE)
+        name = name_match.group(1).strip() if name_match else path.stem
+
+        block_match = re.search(
+            r"^description:\s*(?:>-|>|[|][-]?)\s*\n((?:[ \t].+\n?)*)", fm, re.MULTILINE
+        )
+        if block_match:
+            raw = block_match.group(1)
+            description = " ".join(line.strip() for line in raw.splitlines() if line.strip())
+        else:
+            inline_match = re.search(r"^description:\s*(.+)$", fm, re.MULTILINE)
+            description = inline_match.group(1).strip() if inline_match else ""
+
+        return name, description
+    except Exception:
+        return path.stem, ""
+
+
+def load_plugin_skills(plugin_id: str) -> list[dict[str, str]]:
+    """
+    Returns a list of {"name": str, "description": str} dicts.
+    Reads all .md files at root of PLUGINS_DIR/<plugin_name>/.
+    plugin_name is the part before '@' in plugin_id.
+    """
+    plugin_name = plugin_id.split("@", 1)[0]
+    plugin_dir = PLUGINS_DIR / plugin_name
+    if not plugin_dir.is_dir():
+        return []
+    skills = []
+    for md_file in sorted(plugin_dir.glob("*.md")):
+        name, description = _parse_skill_frontmatter(md_file)
+        skills.append({"name": name, "description": description})
+    return skills
 
 
 def load_installed_plugins() -> list[str] | None:
@@ -40,7 +99,11 @@ def save_settings_local(project_root: Path, settings: dict[str, object]) -> None
         json.dump(settings, f, indent=2)
 
 
-def merge(plugin_ids: list[str], settings: dict[str, object]) -> list[dict[str, object]]:
+def merge(
+    plugin_ids: list[str],
+    settings: dict[str, object],
+    skill_overrides: dict[str, list] | None = None,
+) -> list[dict[str, object]]:
     enabled_map = settings.get("enabledPlugins", {})
     result = []
     for pid in plugin_ids:
@@ -48,6 +111,10 @@ def merge(plugin_ids: list[str], settings: dict[str, object]) -> list[dict[str, 
         name = parts[0]
         marketplace = parts[1] if len(parts) > 1 else ""
         in_local = pid in enabled_map
+        if skill_overrides is not None and pid in skill_overrides:
+            skills = skill_overrides[pid]
+        else:
+            skills = load_plugin_skills(pid)
         result.append({
             "id": pid,
             "name": name,
@@ -55,6 +122,7 @@ def merge(plugin_ids: list[str], settings: dict[str, object]) -> list[dict[str, 
             # Inherited plugins default to enabled until a global settings file says otherwise.
             "enabled": enabled_map.get(pid, True),
             "scope": "local" if in_local else "inherited",
+            "skills": skills,
         })
     return result
 
@@ -124,7 +192,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     500,
                 )
                 return
-            plugins = merge(plugin_ids, settings)
+            plugins = merge(plugin_ids, settings, skill_overrides=MOCK_PLUGIN_SKILLS if mock else None)
             payload = {
                 "plugins": plugins,
                 "project_root": str(project_root),

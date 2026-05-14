@@ -57,6 +57,62 @@ function mergePlugins(pluginIds, settings) {
 
 const MOCK_PLUGINS = ["frontend-design@anthropic", "docx@anthropic"];
 
+const MOCK_PLUGIN_SKILLS = {
+  "frontend-design@anthropic": [
+    { name: "mock-skill", description: "Placeholder skill for development." },
+  ],
+  "docx@anthropic": [
+    { name: "mock-skill", description: "Placeholder skill for development." },
+  ],
+};
+
+function parseSkillFrontmatter(text, fallbackName) {
+  const fmMatch = text.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (!fmMatch) return { name: fallbackName, description: "" };
+  const fm = fmMatch[1];
+
+  const nameMatch = fm.match(/^name:\s*(.+)$/m);
+  const name = nameMatch ? nameMatch[1].trim() : fallbackName;
+
+  const descBlockMatch = fm.match(
+    /^description:\s*(?:>-|>|[|][-]?)?\s*\n([\s\S]*?)(?=\n\S|\s*$)/m
+  );
+  let description = "";
+  if (descBlockMatch) {
+    description = descBlockMatch[1]
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .join(" ");
+  } else {
+    const descInlineMatch = fm.match(/^description:\s*(.+)$/m);
+    if (descInlineMatch) description = descInlineMatch[1].trim();
+  }
+
+  return { name, description };
+}
+
+function loadPluginSkills(pluginId) {
+  const pluginName = pluginId.split("@")[0];
+  const pluginDir = path.join(os.homedir(), ".claude", "plugins", pluginName);
+  if (!fs.existsSync(pluginDir)) return [];
+
+  return fs
+    .readdirSync(pluginDir)
+    .filter((f) => f.endsWith(".md"))
+    .sort()
+    .map((f) => {
+      const fullPath = path.join(pluginDir, f);
+      const stem = path.basename(f, ".md");
+      try {
+        const text = fs.readFileSync(fullPath, "utf8");
+        return parseSkillFrontmatter(text, stem);
+      } catch {
+        return { name: stem, description: "" };
+      }
+    });
+}
+
 class SkillsViewProvider {
   static viewType = "skillsToggle.pluginList";
 
@@ -100,6 +156,11 @@ class SkillsViewProvider {
       if (mock) pluginIds = MOCK_PLUGINS;
       const settings = loadSettingsLocal(projectRoot);
       const plugins = mergePlugins(pluginIds, settings);
+      for (const p of plugins) {
+        p.skills = mock && MOCK_PLUGIN_SKILLS[p.id]
+          ? MOCK_PLUGIN_SKILLS[p.id]
+          : loadPluginSkills(p.id);
+      }
       webview.postMessage({ type: "load", plugins, projectRoot, mock });
     } catch (e) {
       webview.postMessage({ type: "error", message: e.message });
