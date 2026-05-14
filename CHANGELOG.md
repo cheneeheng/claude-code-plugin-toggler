@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-14
+
+### Added
+- Collapsible skill list per plugin row with skill count shown in the disclosure toggle (6d11f43)
+
+### Changed
+- Skill path resolution now prefers `installPath` from `installed_plugins.json` over the legacy `marketplaces/<mp>/<name>/skills/` fallback (d11ee0e)
+- Toggle confirmation dialog removed; state is written immediately on change (d11ee0e)
+
+### Fixed
+- Resolve correct plugin skills directory layout when scanning installed plugins (484172b)
+
 ## [0.0.2] - 2026-05-14
+
+NOTE: Should have been 0.1.0 due to new features added.
 
 ### Added
 - Shared CSS design tokens (`--toggle-on`, `--btn-danger`) applied across HTML and VSCode surfaces (c346d53)
@@ -38,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove toggle confirmation dialog from VSCode extension to streamline UX (61ee55e)
 - Surface JSON parse errors to the caller instead of crashing silently (2d55100)
 
-[Unreleased]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.0.2...v0.1.0
 [0.0.2]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/cheneeheng/claude-code-plugin-toggler/releases/tag/v0.0.1
