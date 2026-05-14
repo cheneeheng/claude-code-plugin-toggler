@@ -14,7 +14,7 @@ function loadInstalledPlugins() {
   if (!fs.existsSync(INSTALLED_PLUGINS_PATH)) return null;
   try {
     const data = JSON.parse(fs.readFileSync(INSTALLED_PLUGINS_PATH, "utf8"));
-    return data.plugins || [];
+    return Object.keys(data.plugins || {});
   } catch (e) {
     throw new Error(`Failed to parse ${INSTALLED_PLUGINS_PATH}: ${e.message}`);
   }
@@ -71,6 +71,12 @@ class SkillsPanel {
       context.subscriptions
     );
 
+    this._panel.onDidChangeViewState(
+      ({ webviewPanel }) => { if (webviewPanel.visible) this._refresh(); },
+      undefined,
+      context.subscriptions
+    );
+
     this._refresh();
   }
 
@@ -109,25 +115,16 @@ class SkillsPanel {
     }
   }
 
-  async _onMessage(msg) {
+  _onMessage(msg) {
     if (msg.type !== "toggle") return;
 
     const { id, enabled } = msg;
-    const label = enabled ? "enabled" : "disabled";
-    const answer = await vscode.window.showWarningMessage(
-      `Set "${id}" to ${label}?`,
-      "Yes",
-      "No"
-    );
-
-    if (answer === "Yes") {
-      const projectRoot = this._projectRoot();
-      if (projectRoot) {
-        const settings = loadSettingsLocal(projectRoot);
-        if (!settings.enabledPlugins) settings.enabledPlugins = {};
-        settings.enabledPlugins[id] = enabled;
-        saveSettingsLocal(projectRoot, settings);
-      }
+    const projectRoot = this._projectRoot();
+    if (projectRoot) {
+      const settings = loadSettingsLocal(projectRoot);
+      if (!settings.enabledPlugins) settings.enabledPlugins = {};
+      settings.enabledPlugins[id] = enabled;
+      saveSettingsLocal(projectRoot, settings);
     }
     this._refresh();
   }

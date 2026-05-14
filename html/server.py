@@ -10,7 +10,7 @@ SETTINGS_LOCAL_PATH = ".claude" / Path("settings.local.json")
 PROJECT_ROOT = Path(os.getcwd())
 
 
-def load_installed_plugins():
+def load_installed_plugins() -> list[str] | None:
     if not INSTALLED_PLUGINS_PATH.exists():
         return None  # signals mock data
     try:
@@ -18,10 +18,10 @@ def load_installed_plugins():
             data = json.load(f)
     except json.JSONDecodeError as e:
         raise ValueError(str(INSTALLED_PLUGINS_PATH)) from e
-    return data.get("plugins", [])
+    return list(data.get("plugins", {}).keys())
 
 
-def load_settings_local(project_root: Path) -> dict:
+def load_settings_local(project_root: Path) -> dict[str, object]:
     path = project_root / ".claude" / "settings.local.json"
     if not path.exists():
         return {}
@@ -32,7 +32,7 @@ def load_settings_local(project_root: Path) -> dict:
         raise ValueError(str(path)) from e
 
 
-def save_settings_local(project_root: Path, settings: dict):
+def save_settings_local(project_root: Path, settings: dict[str, object]) -> None:
     dir_ = project_root / ".claude"
     dir_.mkdir(parents=True, exist_ok=True)
     path = dir_ / "settings.local.json"
@@ -40,7 +40,7 @@ def save_settings_local(project_root: Path, settings: dict):
         json.dump(settings, f, indent=2)
 
 
-def merge(plugin_ids: list[str], settings: dict) -> list[dict]:
+def merge(plugin_ids: list[str], settings: dict[str, object]) -> list[dict[str, object]]:
     enabled_map = settings.get("enabledPlugins", {})
     result = []
     for pid in plugin_ids:
