@@ -1,0 +1,317 @@
+/* --- Light fallback (base) --- */
+:root {
+  --bg: #ffffff;
+  --surface: #f5f5f5;
+  --fg: #111111;
+  --fg-muted: #666666;
+  --border: #e0e0e0;
+  --accent: #0066cc;
+  --toggle-on: #22c55e;
+  --inherited-bg: #f0f0f0;
+  --inherited-fg: #999999;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #1e1e1e;
+    --surface: #2a2a2a;
+    --fg: #eeeeee;
+    --fg-muted: #aaaaaa;
+    --border: #3a3a3a;
+    --accent: #4da3ff;
+    --toggle-on: #22c55e;
+    --inherited-bg: #2a2a2a;
+    --inherited-fg: #666666;
+  }
+}
+
+/* --- Explicit theme tokens (HTML standalone) --- */
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --surface: #f5f5f5;
+  --fg: #111111;
+  --fg-muted: #666666;
+  --border: #e0e0e0;
+  --accent: #0066cc;
+  --toggle-on: #22c55e;
+  --inherited-bg: #f0f0f0;
+  --inherited-fg: #999999;
+}
+
+:root[data-theme="dark"] {
+  --bg: #1e1e1e;
+  --surface: #2a2a2a;
+  --fg: #eeeeee;
+  --fg-muted: #aaaaaa;
+  --border: #3a3a3a;
+  --accent: #4da3ff;
+  --toggle-on: #22c55e;
+  --inherited-bg: #2a2a2a;
+  --inherited-fg: #666666;
+}
+
+/* --- VSCode theme bridge --- */
+:root[data-context="vscode"] {
+  --bg: var(--vscode-editor-background);
+  --surface: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  --fg: var(--vscode-editor-foreground);
+  --fg-muted: var(--vscode-descriptionForeground);
+  --border: var(--vscode-panel-border, #444);
+  --accent: var(--vscode-textLink-foreground);
+  --inherited-bg: var(--vscode-input-background);
+  --inherited-fg: var(--vscode-disabledForeground, #666);
+}
+
+/* --- Reset --- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100vh;
+  padding: 1.25rem;
+}
+
+header { margin-bottom: 1.25rem; }
+
+h1 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.project-path {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  margin-top: 0.2rem;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  word-break: break-all;
+}
+
+/* --- Theme toggle (HTML only) --- */
+.theme-toggle {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.6rem;
+}
+
+.theme-btn {
+  background: var(--surface);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.theme-btn:hover { color: var(--fg); border-color: var(--fg-muted); }
+.theme-btn.active { border-color: var(--accent); color: var(--accent); }
+
+/* --- Project picker (HTML only) --- */
+.project-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.project-picker input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.project-picker input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.project-picker .error {
+  width: 100%;
+  font-size: 0.75rem;
+  color: #e05c5c;
+  margin-top: 0.1rem;
+}
+
+.project-picker .error.hidden { display: none; }
+
+/* --- Mock banner --- */
+.mock-banner {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 5px;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  margin-bottom: 0.9rem;
+  display: none;
+}
+
+/* --- Status / Error --- */
+.status { color: var(--fg-muted); font-size: 0.88rem; padding: 0.75rem 0; }
+.error-msg { color: #e05c5c; font-size: 0.88rem; padding: 0.75rem 0; }
+
+/* --- Section headings --- */
+.section-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+  margin-bottom: 0.2rem;
+  margin-top: 0.9rem;
+}
+
+.section-title:first-child { margin-top: 0; }
+
+.section-desc {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  margin-bottom: 0.4rem;
+}
+
+/* --- Plugin list --- */
+.plugin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.plugin-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.6rem 0.85rem;
+  gap: 0.5rem;
+}
+
+.plugin-row.inherited {
+  background: var(--inherited-bg);
+  opacity: 0.85;
+}
+
+.plugin-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.plugin-name {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--fg);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.plugin-row.inherited .plugin-name { color: var(--inherited-fg); }
+
+.marketplace-badge {
+  font-size: 0.68rem;
+  color: var(--fg-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.08rem 0.35rem;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  white-space: nowrap;
+}
+
+/* --- Toggle switch --- */
+.toggle-wrap { display: flex; align-items: center; flex-shrink: 0; }
+
+.toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 34px;
+  height: 19px;
+  background: var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.toggle::after {
+  content: "";
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  background: var(--fg);
+  border-radius: 50%;
+  top: 3px;
+  left: 3px;
+  transition: left 0.15s;
+}
+
+.toggle:checked { background: var(--toggle-on); }
+.toggle:checked::after { left: 18px; }
+.toggle:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* --- Override button (inherited rows) --- */
+.override-btn {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+  flex-shrink: 0;
+}
+
+/* --- Row actions area (right side of row) --- */
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* --- Bulk actions --- */
+.bulk-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+/* --- Buttons --- */
+button {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+
+button:hover { background: var(--bg); border-color: var(--fg-muted); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* --- Danger button --- */
+.btn-danger {
+  color: #e05c5c;
+  border-color: #e05c5c44;
+}
+
+.btn-danger:hover {
+  background: #e05c5c18;
+  border-color: #e05c5c;
+  color: #e05c5c;
+}

@@ -30,6 +30,8 @@ python3 /path/to/claude-code-plugin-toggler/html/server.py 8080   # custom port
 
 Open `http://127.0.0.1:7779` in a browser.
 
+To stop the server, click **Stop server** in the top-right of the UI or kill the process with `Ctrl+C`.
+
 > If `~/.claude/plugins/installed_plugins.json` doesn't exist, the server returns mock data flagged with `"mock": true`.
 
 ### VSCode extension

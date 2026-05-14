@@ -3,131 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Claude Code Plugin Toggler</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-      font-size: var(--vscode-font-size, 13px);
-      background: var(--vscode-editor-background, #1e1e1e);
-      color: var(--vscode-foreground, #cccccc);
-      padding: 1rem;
+  <title>Skills Toggle</title>
+  <link rel="stylesheet" href="__STYLES_URI__" />
+  <script>
+    if (typeof acquireVsCodeApi !== "undefined") {
+      document.documentElement.setAttribute("data-context", "vscode");
     }
-
-    header { margin-bottom: 1rem; }
-
-    h1 {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: var(--vscode-editor-foreground, #d4d4d4);
-    }
-
-    .project-path {
-      font-size: 0.75rem;
-      color: var(--vscode-descriptionForeground, #858585);
-      margin-top: 0.2rem;
-      font-family: var(--vscode-editor-font-family, monospace);
-    }
-
-    .mock-banner {
-      background: var(--vscode-inputValidation-warningBackground, #352a05);
-      border: 1px solid var(--vscode-inputValidation-warningBorder, #b89500);
-      border-radius: 3px;
-      padding: 0.4rem 0.6rem;
-      font-size: 0.75rem;
-      color: var(--vscode-inputValidation-warningForeground, #cccccc);
-      margin-bottom: 0.75rem;
-      display: none;
-    }
-
-    .status, .error-msg {
-      font-size: 0.85rem;
-      padding: 0.5rem 0;
-    }
-
-    .error-msg { color: var(--vscode-errorForeground, #f48771); }
-
-    .plugin-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.4rem;
-      margin-bottom: 1rem;
-    }
-
-    .plugin-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: var(--vscode-list-hoverBackground, #2a2d2e);
-      border: 1px solid var(--vscode-panel-border, #3c3c3c);
-      border-radius: 3px;
-      padding: 0.5rem 0.75rem;
-    }
-
-    .plugin-info { display: flex; align-items: center; gap: 0.4rem; }
-
-    .plugin-name {
-      font-weight: 500;
-      color: var(--vscode-editor-foreground, #d4d4d4);
-    }
-
-    .marketplace-badge {
-      font-size: 0.7rem;
-      color: var(--vscode-descriptionForeground, #858585);
-      background: var(--vscode-badge-background, #4d4d4d);
-      border-radius: 2px;
-      padding: 0.1rem 0.35rem;
-      font-family: var(--vscode-editor-font-family, monospace);
-    }
-
-    .toggle {
-      appearance: none;
-      -webkit-appearance: none;
-      width: 34px;
-      height: 18px;
-      background: var(--vscode-button-secondaryBackground, #3a3d41);
-      border-radius: 9px;
-      cursor: pointer;
-      position: relative;
-      transition: background 0.15s;
-    }
-
-    .toggle::after {
-      content: "";
-      position: absolute;
-      width: 12px;
-      height: 12px;
-      background: var(--vscode-foreground, #cccccc);
-      border-radius: 50%;
-      top: 3px;
-      left: 3px;
-      transition: left 0.15s;
-    }
-
-    .toggle:checked { background: var(--vscode-button-background, #0e639c); }
-    .toggle:checked::after { left: 19px; }
-    .toggle:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    .bulk-actions { display: flex; gap: 0.4rem; }
-
-    button {
-      background: var(--vscode-button-secondaryBackground, #3a3d41);
-      color: var(--vscode-button-secondaryForeground, #cccccc);
-      border: 1px solid var(--vscode-button-border, transparent);
-      border-radius: 2px;
-      padding: 0.3rem 0.75rem;
-      font-size: 0.8rem;
-      cursor: pointer;
-    }
-
-    button:hover { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
-  </style>
+  </script>
 </head>
 <body>
   <header>
-    <h1>Claude Code Plugin Toggler</h1>
+    <h1>Skills Toggle</h1>
     <div class="project-path" id="project-path"></div>
   </header>
 
@@ -138,7 +24,18 @@
   <div id="status" class="status">Loading plugins...</div>
   <div id="error" class="error-msg" style="display:none"></div>
 
-  <div class="plugin-list" id="plugin-list" style="display:none"></div>
+  <div id="plugin-sections" style="display:none">
+    <div id="local-section">
+      <div class="section-title">Local</div>
+      <div class="section-desc">Plugins with project-specific overrides written to <code>.claude/settings.local.json</code>.</div>
+      <div class="plugin-list" id="local-list"></div>
+    </div>
+    <div id="inherited-section">
+      <div class="section-title">Inherited</div>
+      <div class="section-desc">Plugins using the global default state — no local override set for this project.</div>
+      <div class="plugin-list" id="inherited-list"></div>
+    </div>
+  </div>
 
   <div class="bulk-actions" id="bulk-actions" style="display:none">
     <button id="btn-enable-all">Enable all</button>
@@ -163,46 +60,79 @@
     });
 
     function renderPlugins() {
-      const list = document.getElementById("plugin-list");
-      const status = document.getElementById("status");
+      const sections = document.getElementById("plugin-sections");
       const bulk = document.getElementById("bulk-actions");
 
       if (plugins.length === 0) {
         showStatus("No plugins installed. Install plugins to <code>~/.claude/plugins/</code>.");
-        list.style.display = "none";
+        sections.style.display = "none";
         bulk.style.display = "none";
         return;
       }
 
-      status.style.display = "none";
-      list.style.display = "flex";
+      document.getElementById("status").style.display = "none";
+      sections.style.display = "block";
       bulk.style.display = "flex";
 
-      list.innerHTML = plugins.map((p) => `
-        <div class="plugin-row">
-          <div class="plugin-info">
-            <span class="plugin-name">${esc(p.name)}</span>
-            ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
-          </div>
-          <input type="checkbox" class="toggle" data-id="${esc(p.id)}"
-            ${p.enabled ? "checked" : ""} />
-        </div>
-      `).join("");
+      const local = plugins.filter((p) => p.scope === "local");
+      const inherited = plugins.filter((p) => p.scope !== "local");
 
-      list.querySelectorAll(".toggle").forEach((el) => {
+      document.getElementById("local-section").style.display = local.length ? "block" : "none";
+      document.getElementById("inherited-section").style.display = inherited.length ? "block" : "none";
+
+      document.getElementById("local-list").innerHTML = local.map(localRowHtml).join("");
+      document.getElementById("inherited-list").innerHTML = inherited.map(inheritedRowHtml).join("");
+
+      document.querySelectorAll(".toggle").forEach((el) => {
         el.addEventListener("change", (e) => {
           const id = e.target.dataset.id;
           const enabled = e.target.checked;
-          // optimistic update
           const p = plugins.find((x) => x.id === id);
           if (p) p.enabled = enabled;
           vscode.postMessage({ type: "toggle", id, enabled });
         });
       });
+
+      document.querySelectorAll(".override-btn").forEach((el) => {
+        el.addEventListener("click", (e) => {
+          const id = e.target.dataset.id;
+          const p = plugins.find((x) => x.id === id);
+          if (!p) return;
+          // Pin current state; extension handles confirmation and write.
+          vscode.postMessage({ type: "toggle", id, enabled: p.enabled });
+        });
+      });
+    }
+
+    function localRowHtml(p) {
+      return `
+        <div class="plugin-row" data-id="${esc(p.id)}">
+          <div class="plugin-info">
+            <span class="plugin-name">${esc(p.name)}</span>
+            ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
+          </div>
+          <div class="toggle-wrap">
+            <input type="checkbox" class="toggle" data-id="${esc(p.id)}"
+              ${p.enabled ? "checked" : ""} />
+          </div>
+        </div>`;
+    }
+
+    function inheritedRowHtml(p) {
+      return `
+        <div class="plugin-row inherited" data-id="${esc(p.id)}">
+          <div class="plugin-info">
+            <span class="plugin-name">${esc(p.name)}</span>
+            ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
+          </div>
+          <div class="row-actions">
+            <button class="override-btn" data-id="${esc(p.id)}">Localize</button>
+          </div>
+        </div>`;
     }
 
     function bulkToggle(enabled) {
-      for (const p of plugins) {
+      for (const p of plugins.filter((x) => x.scope === "local")) {
         if (p.enabled !== enabled) {
           p.enabled = enabled;
           vscode.postMessage({ type: "toggle", id: p.id, enabled });
