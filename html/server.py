@@ -1,24 +1,95 @@
 import json
 import os
+import re
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 INSTALLED_PLUGINS_PATH = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+PLUGINS_DIR = Path.home() / ".claude" / "plugins" / "marketplaces"
 
 MOCK_PLUGINS = ["frontend-design@anthropic", "docx@anthropic"]
 
+MOCK_PLUGIN_SKILLS = {
+    "frontend-design@anthropic": [
+        {"name": "mock-skill", "description": "Placeholder skill for development."}
+    ],
+    "docx@anthropic": [
+        {"name": "mock-skill", "description": "Placeholder skill for development."}
+    ],
+}
 
-def load_installed_plugins() -> list[str] | None:
+
+def _parse_skill_frontmatter(path: Path) -> tuple[str, str]:
+    """
+    Returns (name, description) from YAML front matter.
+    Uses regex — no PyYAML dependency.
+    Falls back to skill directory name if front matter is absent or keys are missing.
+    """
+    fallback = path.parent.name
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
+        if not m:
+            return fallback, ""
+        fm = m.group(1)
+
+        name_match = re.search(r"^name:\s*(.+)$", fm, re.MULTILINE)
+        name = name_match.group(1).strip() if name_match else fallback
+
+        block_match = re.search(
+            r"^description:\s*(?:>-|>|[|][-]?)\s*\n((?:[ \t].+\n?)*)", fm, re.MULTILINE
+        )
+        if block_match:
+            raw = block_match.group(1)
+            description = " ".join(line.strip() for line in raw.splitlines() if line.strip())
+        else:
+            inline_match = re.search(r"^description:\s*(.+)$", fm, re.MULTILINE)
+            description = inline_match.group(1).strip() if inline_match else ""
+
+        return name, description
+    except Exception:
+        return fallback, ""
+
+
+def load_plugin_skills(plugin_id: str, install_path: str = "") -> list[dict[str, str]]:
+    """
+    Returns a list of {"name": str, "description": str} dicts.
+    Prefers install_path/skills/ (from installed_plugins.json) so the path is
+    marketplace-agnostic. Falls back to marketplaces/<marketplace>/<name>/skills/.
+    """
+    if install_path:
+        skills_dir = Path(install_path) / "skills"
+    else:
+        plugin_name, marketplace = plugin_id.split("@", 1)
+        skills_dir = PLUGINS_DIR / marketplace / plugin_name / "skills"
+    if not skills_dir.is_dir():
+        return []
+    skills = []
+    for skill_dir in sorted(d for d in skills_dir.iterdir() if d.is_dir()):
+        skill_md = skill_dir / "SKILL.md"
+        name, description = _parse_skill_frontmatter(skill_md) if skill_md.exists() else (skill_dir.name, "")
+        skills.append({"name": name, "description": description})
+    return skills
+
+
+def load_installed_plugins() -> dict[str, str] | None:
+    """Returns {plugin_id: install_path} or None to signal mock mode."""
     if not INSTALLED_PLUGINS_PATH.exists():
-        return None  # signals mock data
+        return None
     try:
         with open(INSTALLED_PLUGINS_PATH) as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
         raise ValueError(str(INSTALLED_PLUGINS_PATH)) from e
-    return list(data.get("plugins", {}).keys())
+    result: dict[str, str] = {}
+    for plugin_id, records in data.get("plugins", {}).items():
+        install_path = ""
+        if isinstance(records, list) and records:
+            install_path = records[0].get("installPath", "")
+        result[plugin_id] = install_path
+    return result
 
 
 def load_settings_local(project_root: Path) -> dict[str, object]:
@@ -40,14 +111,22 @@ def save_settings_local(project_root: Path, settings: dict[str, object]) -> None
         json.dump(settings, f, indent=2)
 
 
-def merge(plugin_ids: list[str], settings: dict[str, object]) -> list[dict[str, object]]:
+def merge(
+    plugins_map: dict[str, str],
+    settings: dict[str, object],
+    skill_overrides: dict[str, list] | None = None,
+) -> list[dict[str, object]]:
     enabled_map = settings.get("enabledPlugins", {})
     result = []
-    for pid in plugin_ids:
+    for pid, install_path in plugins_map.items():
         parts = pid.split("@", 1)
         name = parts[0]
         marketplace = parts[1] if len(parts) > 1 else ""
         in_local = pid in enabled_map
+        if skill_overrides is not None and pid in skill_overrides:
+            skills = skill_overrides[pid]
+        else:
+            skills = load_plugin_skills(pid, install_path)
         result.append({
             "id": pid,
             "name": name,
@@ -55,6 +134,7 @@ def merge(plugin_ids: list[str], settings: dict[str, object]) -> list[dict[str, 
             # Inherited plugins default to enabled until a global settings file says otherwise.
             "enabled": enabled_map.get(pid, True),
             "scope": "local" if in_local else "inherited",
+            "skills": skills,
         })
     return result
 
@@ -112,10 +192,10 @@ class RequestHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/plugins":
             project_root = self.server.project_root
             try:
-                plugin_ids = load_installed_plugins()
-                mock = plugin_ids is None
+                plugins_map = load_installed_plugins()
+                mock = plugins_map is None
                 if mock:
-                    plugin_ids = MOCK_PLUGINS
+                    plugins_map = {p: "" for p in MOCK_PLUGINS}
                 settings = load_settings_local(project_root)
             except ValueError as exc:
                 failed_path = str(exc)
@@ -124,7 +204,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     500,
                 )
                 return
-            plugins = merge(plugin_ids, settings)
+            plugins = merge(plugins_map, settings, skill_overrides=MOCK_PLUGIN_SKILLS if mock else None)
             payload = {
                 "plugins": plugins,
                 "project_root": str(project_root),

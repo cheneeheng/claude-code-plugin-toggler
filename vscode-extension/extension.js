@@ -14,7 +14,11 @@ function loadInstalledPlugins() {
   if (!fs.existsSync(INSTALLED_PLUGINS_PATH)) return null;
   try {
     const data = JSON.parse(fs.readFileSync(INSTALLED_PLUGINS_PATH, "utf8"));
-    return Object.keys(data.plugins || {});
+    const result = {};
+    for (const [id, records] of Object.entries(data.plugins || {})) {
+      result[id] = Array.isArray(records) && records.length > 0 ? (records[0].installPath || "") : "";
+    }
+    return result;
   } catch (e) {
     throw new Error(`Failed to parse ${INSTALLED_PLUGINS_PATH}: ${e.message}`);
   }
@@ -57,6 +61,65 @@ function mergePlugins(pluginIds, settings) {
 
 const MOCK_PLUGINS = ["frontend-design@anthropic", "docx@anthropic"];
 
+const MOCK_PLUGIN_SKILLS = {
+  "frontend-design@anthropic": [
+    { name: "mock-skill", description: "Placeholder skill for development." },
+  ],
+  "docx@anthropic": [
+    { name: "mock-skill", description: "Placeholder skill for development." },
+  ],
+};
+
+function parseSkillFrontmatter(text, fallbackName) {
+  const fmMatch = text.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (!fmMatch) return { name: fallbackName, description: "" };
+  const fm = fmMatch[1];
+
+  const nameMatch = fm.match(/^name:\s*(.+)$/m);
+  const name = nameMatch ? nameMatch[1].trim() : fallbackName;
+
+  const descBlockMatch = fm.match(
+    /^description:\s*(?:>-|>|[|][-]?)?\s*\n([\s\S]*?)(?=\n\S|\s*$)/m
+  );
+  let description = "";
+  if (descBlockMatch) {
+    description = descBlockMatch[1]
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .join(" ");
+  } else {
+    const descInlineMatch = fm.match(/^description:\s*(.+)$/m);
+    if (descInlineMatch) description = descInlineMatch[1].trim();
+  }
+
+  return { name, description };
+}
+
+function loadPluginSkills(pluginId, installPath) {
+  const skillsDir = installPath
+    ? path.join(installPath, "skills")
+    : (() => {
+        const [pluginName, marketplace] = pluginId.split("@");
+        return path.join(os.homedir(), ".claude", "plugins", "marketplaces", marketplace, pluginName, "skills");
+      })();
+  if (!fs.existsSync(skillsDir)) return [];
+
+  return fs
+    .readdirSync(skillsDir)
+    .filter((f) => fs.statSync(path.join(skillsDir, f)).isDirectory())
+    .sort()
+    .map((skillDirName) => {
+      const skillMd = path.join(skillsDir, skillDirName, "SKILL.md");
+      try {
+        const text = fs.readFileSync(skillMd, "utf8");
+        return parseSkillFrontmatter(text, skillDirName);
+      } catch {
+        return { name: skillDirName, description: "" };
+      }
+    });
+}
+
 class SkillsViewProvider {
   static viewType = "skillsToggle.pluginList";
 
@@ -95,36 +158,29 @@ class SkillsViewProvider {
       return;
     }
     try {
-      let pluginIds = loadInstalledPlugins();
-      const mock = pluginIds === null;
-      if (mock) pluginIds = MOCK_PLUGINS;
+      let pluginsMap = loadInstalledPlugins();
+      const mock = pluginsMap === null;
+      if (mock) pluginsMap = Object.fromEntries(MOCK_PLUGINS.map((p) => [p, ""]));
       const settings = loadSettingsLocal(projectRoot);
-      const plugins = mergePlugins(pluginIds, settings);
+      const plugins = mergePlugins(Object.keys(pluginsMap), settings);
+      for (const p of plugins) {
+        const installPath = mock ? "" : (pluginsMap[p.id] || "");
+        p.skills = mock && MOCK_PLUGIN_SKILLS[p.id]
+          ? MOCK_PLUGIN_SKILLS[p.id]
+          : loadPluginSkills(p.id, installPath);
+      }
       webview.postMessage({ type: "load", plugins, projectRoot, mock });
     } catch (e) {
       webview.postMessage({ type: "error", message: e.message });
     }
   }
 
-  async _onMessage(webview, msg) {
+  _onMessage(webview, msg) {
     if (msg.type !== "toggle") return;
 
     const { id, enabled } = msg;
     const projectRoot = this._projectRoot();
     if (!projectRoot) return;
-
-    const label = enabled ? "enable" : "disable";
-    const answer = await vscode.window.showWarningMessage(
-      `Pin "${id}" to local settings? (${label})`,
-      "Yes",
-      "No"
-    );
-
-    if (answer !== "Yes") {
-      // Re-send current state to reset the webview toggle.
-      this._refresh(webview);
-      return;
-    }
 
     const settings = loadSettingsLocal(projectRoot);
     if (!settings.enabledPlugins) settings.enabledPlugins = {};
