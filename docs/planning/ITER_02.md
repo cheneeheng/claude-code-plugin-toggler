@@ -26,18 +26,25 @@ sections_unchanged: [01, 03]
 **InstalledPlugin** — one new field added to shape from ITER_01.md §02:
 - `skills` — `Skill[]`, may be empty if no skill files found in plugin directory
 
-Plugin directory layout assumed:
+Plugin directory layout:
 ```
 ~/.claude/plugins/
-└── frontend-design/      ← directory named after the plugin name part only (before @)
-    ├── SKILL.md          ← one or more .md files at root of plugin dir
-    ├── another-skill.md
-    └── ...               ← subdirectories ignored in this iteration
+└── marketplaces/
+    └── anthropic/                    <- marketplace name (part after @)
+        └── frontend-design/          <- plugin name (part before @)
+            └── skills/
+                ├── frontend-design/  <- one directory per skill
+                │   └── SKILL.md      <- front matter lives here
+                └── another-skill/
+                    └── SKILL.md
 ```
 
-> **⚠ Unresolved assumption — verify before implementing.** Plugin IDs contain `@` (e.g. `frontend-design@anthropic`). The `@` character is illegal in directory names on Windows and uncommon on Unix. This plan assumes plugin directories use the name portion only (`frontend-design/`). If the actual layout differs (e.g. full id, or `anthropic/frontend-design/` nested), update `load_plugin_skills()` in both `server.py` and `extension.js` accordingly. The key `PLUGINS_DIR` constant in both files is the single place to fix.
+For a plugin id `frontend-design@anthropic`, the path to its skills root is:
+`~/.claude/plugins/marketplaces/anthropic/frontend-design/skills/`
 
-Front matter parsed from each `.md` file (YAML between `---` delimiters):
+Each skill is a subdirectory of `skills/`; its metadata is read from `SKILL.md` inside that subdirectory.
+
+Front matter parsed from each `SKILL.md` (YAML between `---` delimiters):
 ```yaml
 ---
 name: frontend-design
@@ -83,29 +90,29 @@ If a `.md` file has no parseable front matter, it is included with `name` = file
 
 **New helper: `load_plugin_skills(plugin_id)`**
 
-Reads all `.md` files at the root of `~/.claude/plugins/<plugin_id>/` and extracts front matter.
+Reads all skill subdirectories under `~/.claude/plugins/marketplaces/<marketplace>/<name>/skills/` and extracts front matter from `SKILL.md` in each.
 
 ```python
 import re
 
-PLUGINS_DIR = pathlib.Path.home() / ".claude" / "plugins"
+PLUGINS_DIR = pathlib.Path.home() / ".claude" / "plugins" / "marketplaces"
 
 def load_plugin_skills(plugin_id):
     """
     Returns a list of { "name": str, "description": str } dicts.
-    Reads all .md files at root of ~/.claude/plugins/<plugin_name>/.
-    plugin_name is the part before '@' in plugin_id.
-    Parses YAML front matter (name, description keys only).
-    Falls back to filename stem if front matter is absent or unparseable.
+    Directory path: ~/.claude/plugins/marketplaces/<marketplace>/<name>/skills/
+    Each skill is a subdirectory; metadata is read from SKILL.md inside it.
+    Falls back to directory name if front matter is absent or unparseable.
     """
-    plugin_name = plugin_id.split("@", 1)[0]   # "frontend-design@anthropic" → "frontend-design"
-    plugin_dir = PLUGINS_DIR / plugin_name
-    if not plugin_dir.is_dir():
+    plugin_name, marketplace = plugin_id.split("@", 1)   # "frontend-design@anthropic"
+    skills_dir = PLUGINS_DIR / marketplace / plugin_name / "skills"
+    if not skills_dir.is_dir():
         return []
 
     skills = []
-    for md_file in sorted(plugin_dir.glob("*.md")):
-        name, description = _parse_skill_frontmatter(md_file)
+    for skill_dir in sorted(d for d in skills_dir.iterdir() if d.is_dir()):
+        skill_md = skill_dir / "SKILL.md"
+        name, description = _parse_skill_frontmatter(skill_md) if skill_md.exists() else (skill_dir.name, "")
         skills.append({"name": name, "description": description})
     return skills
 
@@ -114,18 +121,20 @@ def _parse_skill_frontmatter(path):
     """
     Returns (name, description) from YAML front matter.
     Uses regex — no PyYAML dependency.
-    Falls back to (stem, "") if front matter is absent or keys are missing.
+    Falls back to the skill directory name (path.parent.name) if front matter
+    is absent or keys are missing — path.stem would always be "SKILL" here.
     """
+    fallback = path.parent.name
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
         m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
         if not m:
-            return path.stem, ""
+            return fallback, ""
         fm = m.group(1)
 
         # Extract name — simple single-line value
         name_match = re.search(r"^name:\s*(.+)$", fm, re.MULTILINE)
-        name = name_match.group(1).strip() if name_match else path.stem
+        name = name_match.group(1).strip() if name_match else fallback
 
         # Extract description — two cases handled separately:
         # 1. Block scalar (>- or > or |): collect subsequent indented lines
@@ -140,7 +149,7 @@ def _parse_skill_frontmatter(path):
 
         return name, description
     except Exception:
-        return path.stem, ""
+        return fallback, ""
 ```
 
 > **No PyYAML.** stdlib only — regex covers the two front matter patterns that appear in real skill files (plain scalar and `>-` block scalar). Anything more exotic is handled gracefully by the fallback.
@@ -188,21 +197,20 @@ def merge(plugins, settings):
 // fs, path, os assumed already required at top of extension.js
 
 function loadPluginSkills(pluginId) {
-  const pluginName = pluginId.split('@')[0];   // "frontend-design@anthropic" → "frontend-design"
-  const pluginDir = path.join(os.homedir(), '.claude', 'plugins', pluginName);
-  if (!fs.existsSync(pluginDir)) return [];
+  const [pluginName, marketplace] = pluginId.split('@');
+  const skillsDir = path.join(os.homedir(), '.claude', 'plugins', 'marketplaces', marketplace, pluginName, 'skills');
+  if (!fs.existsSync(skillsDir)) return [];
 
-  return fs.readdirSync(pluginDir)
-    .filter(f => f.endsWith('.md'))
+  return fs.readdirSync(skillsDir)
+    .filter(f => fs.statSync(path.join(skillsDir, f)).isDirectory())
     .sort()
-    .map(f => {
-      const fullPath = path.join(pluginDir, f);
-      const stem = path.basename(f, '.md');
+    .map(skillDirName => {
+      const skillMd = path.join(skillsDir, skillDirName, 'SKILL.md');
       try {
-        const text = fs.readFileSync(fullPath, 'utf8');
-        return parseSkillFrontmatter(text, stem);
+        const text = fs.readFileSync(skillMd, 'utf8');
+        return parseSkillFrontmatter(text, skillDirName);
       } catch {
-        return { name: stem, description: '' };
+        return { name: skillDirName, description: '' };
       }
     });
 }

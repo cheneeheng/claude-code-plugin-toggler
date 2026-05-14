@@ -93,22 +93,21 @@ function parseSkillFrontmatter(text, fallbackName) {
 }
 
 function loadPluginSkills(pluginId) {
-  const pluginName = pluginId.split("@")[0];
-  const pluginDir = path.join(os.homedir(), ".claude", "plugins", pluginName);
-  if (!fs.existsSync(pluginDir)) return [];
+  const [pluginName, marketplace] = pluginId.split("@");
+  const skillsDir = path.join(os.homedir(), ".claude", "plugins", "marketplaces", marketplace, pluginName, "skills");
+  if (!fs.existsSync(skillsDir)) return [];
 
   return fs
-    .readdirSync(pluginDir)
-    .filter((f) => f.endsWith(".md"))
+    .readdirSync(skillsDir)
+    .filter((f) => fs.statSync(path.join(skillsDir, f)).isDirectory())
     .sort()
-    .map((f) => {
-      const fullPath = path.join(pluginDir, f);
-      const stem = path.basename(f, ".md");
+    .map((skillDirName) => {
+      const skillMd = path.join(skillsDir, skillDirName, "SKILL.md");
       try {
-        const text = fs.readFileSync(fullPath, "utf8");
-        return parseSkillFrontmatter(text, stem);
+        const text = fs.readFileSync(skillMd, "utf8");
+        return parseSkillFrontmatter(text, skillDirName);
       } catch {
-        return { name: stem, description: "" };
+        return { name: skillDirName, description: "" };
       }
     });
 }

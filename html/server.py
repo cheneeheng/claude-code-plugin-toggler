@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 INSTALLED_PLUGINS_PATH = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-PLUGINS_DIR = Path.home() / ".claude" / "plugins"
+PLUGINS_DIR = Path.home() / ".claude" / "plugins" / "marketplaces"
 
 MOCK_PLUGINS = ["frontend-design@anthropic", "docx@anthropic"]
 
@@ -25,17 +25,18 @@ def _parse_skill_frontmatter(path: Path) -> tuple[str, str]:
     """
     Returns (name, description) from YAML front matter.
     Uses regex — no PyYAML dependency.
-    Falls back to (stem, "") if front matter is absent or keys are missing.
+    Falls back to skill directory name if front matter is absent or keys are missing.
     """
+    fallback = path.parent.name
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
         m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
         if not m:
-            return path.stem, ""
+            return fallback, ""
         fm = m.group(1)
 
         name_match = re.search(r"^name:\s*(.+)$", fm, re.MULTILINE)
-        name = name_match.group(1).strip() if name_match else path.stem
+        name = name_match.group(1).strip() if name_match else fallback
 
         block_match = re.search(
             r"^description:\s*(?:>-|>|[|][-]?)\s*\n((?:[ \t].+\n?)*)", fm, re.MULTILINE
@@ -49,22 +50,23 @@ def _parse_skill_frontmatter(path: Path) -> tuple[str, str]:
 
         return name, description
     except Exception:
-        return path.stem, ""
+        return fallback, ""
 
 
 def load_plugin_skills(plugin_id: str) -> list[dict[str, str]]:
     """
     Returns a list of {"name": str, "description": str} dicts.
-    Reads all .md files at root of PLUGINS_DIR/<plugin_name>/.
-    plugin_name is the part before '@' in plugin_id.
+    Directory: ~/.claude/plugins/marketplaces/<marketplace>/<name>/skills/
+    Each skill is a subdirectory; metadata is read from SKILL.md inside it.
     """
-    plugin_name = plugin_id.split("@", 1)[0]
-    plugin_dir = PLUGINS_DIR / plugin_name
-    if not plugin_dir.is_dir():
+    plugin_name, marketplace = plugin_id.split("@", 1)
+    skills_dir = PLUGINS_DIR / marketplace / plugin_name / "skills"
+    if not skills_dir.is_dir():
         return []
     skills = []
-    for md_file in sorted(plugin_dir.glob("*.md")):
-        name, description = _parse_skill_frontmatter(md_file)
+    for skill_dir in sorted(d for d in skills_dir.iterdir() if d.is_dir()):
+        skill_md = skill_dir / "SKILL.md"
+        name, description = _parse_skill_frontmatter(skill_md) if skill_md.exists() else (skill_dir.name, "")
         skills.append({"name": name, "description": description})
     return skills
 
