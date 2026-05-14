@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Code Plugin Toggler</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      font-size: var(--vscode-font-size, 13px);
+      background: var(--vscode-editor-background, #1e1e1e);
+      color: var(--vscode-foreground, #cccccc);
+      padding: 1rem;
+    }
+
+    header { margin-bottom: 1rem; }
+
+    h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--vscode-editor-foreground, #d4d4d4);
+    }
+
+    .project-path {
+      font-size: 0.75rem;
+      color: var(--vscode-descriptionForeground, #858585);
+      margin-top: 0.2rem;
+      font-family: var(--vscode-editor-font-family, monospace);
+    }
+
+    .mock-banner {
+      background: var(--vscode-inputValidation-warningBackground, #352a05);
+      border: 1px solid var(--vscode-inputValidation-warningBorder, #b89500);
+      border-radius: 3px;
+      padding: 0.4rem 0.6rem;
+      font-size: 0.75rem;
+      color: var(--vscode-inputValidation-warningForeground, #cccccc);
+      margin-bottom: 0.75rem;
+      display: none;
+    }
+
+    .status, .error-msg {
+      font-size: 0.85rem;
+      padding: 0.5rem 0;
+    }
+
+    .error-msg { color: var(--vscode-errorForeground, #f48771); }
+
+    .plugin-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-bottom: 1rem;
+    }
+
+    .plugin-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--vscode-list-hoverBackground, #2a2d2e);
+      border: 1px solid var(--vscode-panel-border, #3c3c3c);
+      border-radius: 3px;
+      padding: 0.5rem 0.75rem;
+    }
+
+    .plugin-info { display: flex; align-items: center; gap: 0.4rem; }
+
+    .plugin-name {
+      font-weight: 500;
+      color: var(--vscode-editor-foreground, #d4d4d4);
+    }
+
+    .marketplace-badge {
+      font-size: 0.7rem;
+      color: var(--vscode-descriptionForeground, #858585);
+      background: var(--vscode-badge-background, #4d4d4d);
+      border-radius: 2px;
+      padding: 0.1rem 0.35rem;
+      font-family: var(--vscode-editor-font-family, monospace);
+    }
+
+    .toggle {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 34px;
+      height: 18px;
+      background: var(--vscode-button-secondaryBackground, #3a3d41);
+      border-radius: 9px;
+      cursor: pointer;
+      position: relative;
+      transition: background 0.15s;
+    }
+
+    .toggle::after {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: var(--vscode-foreground, #cccccc);
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: left 0.15s;
+    }
+
+    .toggle:checked { background: var(--vscode-button-background, #0e639c); }
+    .toggle:checked::after { left: 19px; }
+    .toggle:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .bulk-actions { display: flex; gap: 0.4rem; }
+
+    button {
+      background: var(--vscode-button-secondaryBackground, #3a3d41);
+      color: var(--vscode-button-secondaryForeground, #cccccc);
+      border: 1px solid var(--vscode-button-border, transparent);
+      border-radius: 2px;
+      padding: 0.3rem 0.75rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    button:hover { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Claude Code Plugin Toggler</h1>
+    <div class="project-path" id="project-path"></div>
+  </header>
+
+  <div class="mock-banner" id="mock-banner">
+    Mock data — <code>~/.claude/plugins/installed_plugins.json</code> not found.
+  </div>
+
+  <div id="status" class="status">Loading plugins...</div>
+  <div id="error" class="error-msg" style="display:none"></div>
+
+  <div class="plugin-list" id="plugin-list" style="display:none"></div>
+
+  <div class="bulk-actions" id="bulk-actions" style="display:none">
+    <button id="btn-enable-all">Enable all</button>
+    <button id="btn-disable-all">Disable all</button>
+  </div>
+
+  <script>
+    const vscode = acquireVsCodeApi();
+    let plugins = [];
+
+    window.addEventListener("message", (event) => {
+      const msg = event.data;
+      if (msg.type === "load") {
+        plugins = msg.plugins || [];
+        document.getElementById("project-path").textContent = msg.projectRoot || "";
+        document.getElementById("mock-banner").style.display = msg.mock ? "block" : "none";
+        document.getElementById("error").style.display = "none";
+        renderPlugins();
+      } else if (msg.type === "error") {
+        showError(msg.message);
+      }
+    });
+
+    function renderPlugins() {
+      const list = document.getElementById("plugin-list");
+      const status = document.getElementById("status");
+      const bulk = document.getElementById("bulk-actions");
+
+      if (plugins.length === 0) {
+        showStatus("No plugins installed. Install plugins to <code>~/.claude/plugins/</code>.");
+        list.style.display = "none";
+        bulk.style.display = "none";
+        return;
+      }
+
+      status.style.display = "none";
+      list.style.display = "flex";
+      bulk.style.display = "flex";
+
+      list.innerHTML = plugins.map((p) => `
+        <div class="plugin-row">
+          <div class="plugin-info">
+            <span class="plugin-name">${esc(p.name)}</span>
+            ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
+          </div>
+          <input type="checkbox" class="toggle" data-id="${esc(p.id)}"
+            ${p.enabled ? "checked" : ""} />
+        </div>
+      `).join("");
+
+      list.querySelectorAll(".toggle").forEach((el) => {
+        el.addEventListener("change", (e) => {
+          const id = e.target.dataset.id;
+          const enabled = e.target.checked;
+          // optimistic update
+          const p = plugins.find((x) => x.id === id);
+          if (p) p.enabled = enabled;
+          vscode.postMessage({ type: "toggle", id, enabled });
+        });
+      });
+    }
+
+    function bulkToggle(enabled) {
+      for (const p of plugins) {
+        if (p.enabled !== enabled) {
+          p.enabled = enabled;
+          vscode.postMessage({ type: "toggle", id: p.id, enabled });
+        }
+      }
+      renderPlugins();
+    }
+
+    function showStatus(html) {
+      const s = document.getElementById("status");
+      s.innerHTML = html;
+      s.style.display = "block";
+      document.getElementById("error").style.display = "none";
+    }
+
+    function showError(msg) {
+      const e = document.getElementById("error");
+      e.textContent = msg;
+      e.style.display = "block";
+      document.getElementById("status").style.display = "none";
+    }
+
+    function esc(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    document.getElementById("btn-enable-all").addEventListener("click", () => bulkToggle(true));
+    document.getElementById("btn-disable-all").addEventListener("click", () => bulkToggle(false));
+  </script>
+</body>
+</html>
