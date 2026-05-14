@@ -27,10 +27,12 @@
   <div id="plugin-sections" style="display:none">
     <div id="local-section">
       <div class="section-title">Local</div>
+      <div class="section-desc">Plugins with project-specific overrides written to <code>.claude/settings.local.json</code>.</div>
       <div class="plugin-list" id="local-list"></div>
     </div>
     <div id="inherited-section">
       <div class="section-title">Inherited</div>
+      <div class="section-desc">Plugins using the global default state — no local override set for this project.</div>
       <div class="plugin-list" id="inherited-list"></div>
     </div>
   </div>
@@ -116,22 +118,15 @@
         </div>`;
     }
 
-    const INHERITED_TOOLTIP =
-      "This plugin has no local setting. It is using the global default (enabled). " +
-      "Click 'Override locally' to manage it in this project.";
-
     function inheritedRowHtml(p) {
       return `
         <div class="plugin-row inherited" data-id="${esc(p.id)}">
           <div class="plugin-info">
             <span class="plugin-name">${esc(p.name)}</span>
             ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
-            <span class="inherited-badge" title="${esc(INHERITED_TOOLTIP)}">global default</span>
           </div>
           <div class="row-actions">
-            <input type="checkbox" class="toggle" data-id="${esc(p.id)}"
-              ${p.enabled ? "checked" : ""} disabled />
-            <button class="override-btn" data-id="${esc(p.id)}">Override locally</button>
+            <button class="override-btn" data-id="${esc(p.id)}">Localize</button>
           </div>
         </div>`;
     }

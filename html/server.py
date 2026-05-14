@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -162,6 +163,10 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
             self.server.project_root = Path(path_str)
             self._send_json({"ok": True, "project_root": path_str})
+
+        elif self.path == "/api/shutdown":
+            self._send_json({"ok": True})
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
 
         else:
             self.send_response(404)

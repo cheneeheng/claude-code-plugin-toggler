@@ -8,19 +8,22 @@
 </head>
 <body>
   <header>
-    <h1>Skills Toggle</h1>
+    <div class="header-top">
+      <h1>Skills Toggle</h1>
+      <button class="btn-danger" id="btn-kill-server">Stop server</button>
+      <div class="theme-toggle">
+        <button class="theme-btn" data-theme="light">Light</button>
+        <button class="theme-btn" data-theme="dark">Dark</button>
+        <button class="theme-btn" data-theme="">System</button>
+      </div>
+    </div>
+
     <div class="project-path" id="project-path"></div>
 
     <div class="project-picker">
       <input type="text" id="project-path-input" placeholder="/path/to/project" />
       <button id="change-project">Change</button>
       <span id="project-error" class="error hidden"></span>
-    </div>
-
-    <div class="theme-toggle">
-      <button class="theme-btn" data-theme="light">Light</button>
-      <button class="theme-btn" data-theme="dark">Dark</button>
-      <button class="theme-btn" data-theme="">System</button>
     </div>
   </header>
 
@@ -35,10 +38,12 @@
   <div id="plugin-sections" style="display:none">
     <div id="local-section">
       <div class="section-title">Local</div>
+      <div class="section-desc">Plugins with project-specific overrides written to <code>.claude/settings.local.json</code>.</div>
       <div class="plugin-list" id="local-list"></div>
     </div>
     <div id="inherited-section">
       <div class="section-title">Inherited</div>
+      <div class="section-desc">Plugins using the global default state — no local override set for this project.</div>
       <div class="plugin-list" id="inherited-list"></div>
     </div>
   </div>
@@ -139,22 +144,15 @@
         </div>`;
     }
 
-    const INHERITED_TOOLTIP =
-      "This plugin has no local setting. It is using the global default (enabled). " +
-      "Click 'Override locally' to manage it in this project.";
-
     function inheritedRowHtml(p) {
       return `
         <div class="plugin-row inherited" data-id="${esc(p.id)}">
           <div class="plugin-info">
             <span class="plugin-name">${esc(p.name)}</span>
             ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
-            <span class="inherited-badge" title="${esc(INHERITED_TOOLTIP)}">global default</span>
           </div>
           <div class="row-actions">
-            <input type="checkbox" class="toggle" data-id="${esc(p.id)}"
-              ${p.enabled ? "checked" : ""} disabled />
-            <button class="override-btn" data-id="${esc(p.id)}">Override locally</button>
+            <button class="override-btn" data-id="${esc(p.id)}">Localize</button>
           </div>
         </div>`;
     }
@@ -273,6 +271,19 @@
 
     document.getElementById("btn-enable-all").addEventListener("click", () => bulkToggle(true));
     document.getElementById("btn-disable-all").addEventListener("click", () => bulkToggle(false));
+
+    document.getElementById("btn-kill-server").addEventListener("click", async () => {
+      const btn = document.getElementById("btn-kill-server");
+      btn.disabled = true;
+      btn.textContent = "Stopping...";
+      try {
+        await fetch("/api/shutdown", { method: "POST" });
+      } catch (_) {
+        // connection drop on shutdown is expected
+      }
+      document.body.innerHTML =
+        '<p style="padding:1.25rem;font-family:sans-serif;color:#e05c5c">Server stopped.</p>';
+    });
 
     load();
   </script>

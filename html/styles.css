@@ -6,6 +6,7 @@
   --fg-muted: #666666;
   --border: #e0e0e0;
   --accent: #0066cc;
+  --toggle-on: #22c55e;
   --inherited-bg: #f0f0f0;
   --inherited-fg: #999999;
 }
@@ -18,6 +19,7 @@
     --fg-muted: #aaaaaa;
     --border: #3a3a3a;
     --accent: #4da3ff;
+    --toggle-on: #22c55e;
     --inherited-bg: #2a2a2a;
     --inherited-fg: #666666;
   }
@@ -31,6 +33,7 @@
   --fg-muted: #666666;
   --border: #e0e0e0;
   --accent: #0066cc;
+  --toggle-on: #22c55e;
   --inherited-bg: #f0f0f0;
   --inherited-fg: #999999;
 }
@@ -42,6 +45,7 @@
   --fg-muted: #aaaaaa;
   --border: #3a3a3a;
   --accent: #4da3ff;
+  --toggle-on: #22c55e;
   --inherited-bg: #2a2a2a;
   --inherited-fg: #666666;
 }
@@ -85,11 +89,19 @@ h1 {
   word-break: break-all;
 }
 
+/* --- Header layout (HTML only) --- */
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 /* --- Theme toggle (HTML only) --- */
 .theme-toggle {
   display: flex;
   gap: 0.25rem;
-  margin-top: 0.6rem;
+  flex-shrink: 0;
 }
 
 .theme-btn {
@@ -164,11 +176,17 @@ h1 {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--fg-muted);
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.2rem;
   margin-top: 0.9rem;
 }
 
 .section-title:first-child { margin-top: 0; }
+
+.section-desc {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  margin-bottom: 0.4rem;
+}
 
 /* --- Plugin list --- */
 .plugin-list {
@@ -180,7 +198,7 @@ h1 {
 
 .plugin-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -196,8 +214,9 @@ h1 {
 
 .plugin-info {
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
   min-width: 0;
   flex: 1;
 }
@@ -206,9 +225,8 @@ h1 {
   font-size: 0.88rem;
   font-weight: 500;
   color: var(--fg);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .plugin-row.inherited .plugin-name { color: var(--inherited-fg); }
@@ -222,19 +240,6 @@ h1 {
   padding: 0.08rem 0.35rem;
   font-family: "SFMono-Regular", Consolas, monospace;
   white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.inherited-badge {
-  font-size: 0.65rem;
-  color: var(--inherited-fg);
-  background: transparent;
-  border: 1px solid var(--inherited-fg);
-  border-radius: 3px;
-  padding: 0.08rem 0.35rem;
-  white-space: nowrap;
-  flex-shrink: 0;
-  cursor: help;
 }
 
 /* --- Toggle switch --- */
@@ -265,7 +270,7 @@ h1 {
   transition: left 0.15s;
 }
 
-.toggle:checked { background: var(--accent); }
+.toggle:checked { background: var(--toggle-on); }
 .toggle:checked::after { left: 18px; }
 .toggle:disabled { opacity: 0.35; cursor: not-allowed; }
 
@@ -306,3 +311,15 @@ button {
 
 button:hover { background: var(--bg); border-color: var(--fg-muted); }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* --- Danger button (kill server) --- */
+.btn-danger {
+  color: #e05c5c;
+  border-color: #e05c5c44;
+}
+
+.btn-danger:hover {
+  background: #e05c5c18;
+  border-color: #e05c5c;
+  color: #e05c5c;
+}

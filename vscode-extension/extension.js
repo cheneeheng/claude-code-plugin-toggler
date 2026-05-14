@@ -77,6 +77,9 @@ class SkillsViewProvider {
     webviewView.webview.onDidReceiveMessage((msg) =>
       this._onMessage(webviewView.webview, msg)
     );
+    webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible) this._refresh(webviewView.webview);
+    });
   }
 
   _projectRoot() {
