@@ -162,6 +162,9 @@
     }
 
     function localRowHtml(p) {
+      const control = p.installed === false
+        ? `<button class="mp-install-btn" onclick="installLocalPlugin('${esc(p.id)}')">Install</button>`
+        : `<input type="checkbox" class="toggle" data-id="${esc(p.id)}" ${p.enabled ? "checked" : ""} />`;
       return `
         <div class="plugin-row" data-id="${esc(p.id)}">
           <div class="plugin-info">
@@ -172,8 +175,7 @@
             ${renderAgentsDisclosure(p.agents)}
           </div>
           <div class="toggle-wrap">
-            <input type="checkbox" class="toggle" data-id="${esc(p.id)}"
-              ${p.enabled ? "checked" : ""} />
+            ${control}
           </div>
         </div>`;
     }
@@ -280,7 +282,7 @@
         </div>`;
     }
 
-    // ---- install action (VSCode) ----
+    // ---- install actions (VSCode) ----
     async function installPlugin(id) {
       const btn = document.getElementById(`mp-btn-${CSS.escape(id)}`);
       if (btn) {
@@ -291,9 +293,14 @@
       vscodeApi.postMessage({ type: "install", id });
     }
 
+    function installLocalPlugin(id) {
+      vscodeApi.postMessage({ type: "install", id });
+    }
+
     // ---- bulk ----
     function bulkToggle(enabled) {
       for (const p of state.local) {
+        if (p.installed === false) continue;
         if (p.enabled !== enabled) {
           p.enabled = enabled;
           vscodeApi.postMessage({ type: "toggle", id: p.id, enabled });

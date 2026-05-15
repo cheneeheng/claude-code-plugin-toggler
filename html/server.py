@@ -430,7 +430,39 @@ class RequestHandler(BaseHTTPRequestHandler):
                 raw = load_installed_plugins(project_root)
                 is_mock = raw.pop("mock", False)
                 settings = load_settings_local(project_root)
+
+                # Case 2: plugins in installed_plugins.json absent from settings → add enabled:true
+                if not is_mock:
+                    enabled_plugins = settings.get("enabledPlugins", {})
+                    changed = False
+                    for entry in raw.get("local", []):
+                        if entry["id"] not in enabled_plugins:
+                            enabled_plugins[entry["id"]] = True
+                            changed = True
+                    if changed:
+                        settings["enabledPlugins"] = enabled_plugins
+                        save_settings_local(project_root, settings)
+
                 merged = merge(raw, settings)
+
+                # Case 1: plugins in settings but not installed → orphans with install button
+                installed_local_ids = {e["id"] for e in raw.get("local", [])}
+                for pid in settings.get("enabledPlugins", {}):
+                    if pid not in installed_local_ids:
+                        at_idx = pid.find("@")
+                        name = pid[:at_idx] if at_idx != -1 else pid
+                        marketplace = pid[at_idx + 1:] if at_idx != -1 else ""
+                        merged["local"].append({
+                            "id": pid,
+                            "name": name,
+                            "marketplace": marketplace,
+                            "version": "",
+                            "pluginScope": "local",
+                            "skills": [],
+                            "agents": [],
+                            "installed": False,
+                        })
+
             except ValueError as exc:
                 failed_path = str(exc)
                 self._send_json(

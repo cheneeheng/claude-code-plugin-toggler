@@ -200,6 +200,9 @@
     }
 
     function localRowHtml(p) {
+      const control = p.installed === false
+        ? `<button class="mp-install-btn" onclick="installLocalPlugin('${esc(p.id)}', this)">Install</button>`
+        : `<input type="checkbox" class="toggle" data-id="${esc(p.id)}" ${p.enabled ? "checked" : ""} />`;
       return `
         <div class="plugin-row" data-id="${esc(p.id)}">
           <div class="plugin-info">
@@ -210,8 +213,7 @@
             ${renderAgentsDisclosure(p.agents)}
           </div>
           <div class="toggle-wrap">
-            <input type="checkbox" class="toggle" data-id="${esc(p.id)}"
-              ${p.enabled ? "checked" : ""} />
+            ${control}
           </div>
         </div>`;
     }
@@ -251,11 +253,36 @@
       }
     }
 
+    // ---- install local orphan ----
+    async function installLocalPlugin(id, btnEl) {
+      if (btnEl) {
+        btnEl.textContent = "Installing…";
+        btnEl.disabled = true;
+      }
+      try {
+        const res = await fetch("/api/install", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Unknown error");
+        await fetchPlugins();
+      } catch (err) {
+        if (btnEl) {
+          btnEl.innerHTML = "Install";
+          btnEl.disabled = false;
+        }
+        showError(`Install failed: ${err.message}`);
+      }
+    }
+
     // ---- bulk ----
     async function bulkToggle(enabled) {
       const buttons = document.querySelectorAll(".bulk-actions button");
       buttons.forEach((b) => (b.disabled = true));
       for (const p of state.local) {
+        if (p.installed === false) continue;
         if (p.enabled !== enabled) {
           const el = document.querySelector(`.toggle[data-id="${esc(p.id)}"]`);
           if (el) await toggle(p.id, enabled, el);

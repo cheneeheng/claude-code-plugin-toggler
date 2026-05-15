@@ -323,11 +323,40 @@ class SkillsViewProvider {
     try {
       const raw = loadInstalledPlugins(projectRoot);
       const isMock = raw.mock || false;
-      const settings = loadSettingsLocal(projectRoot);
+      let settings = loadSettingsLocal(projectRoot);
+
+      // Case 2: plugins in installed_plugins.json but absent from settings → add enabled:true
+      if (!isMock) {
+        const enabledPlugins = settings.enabledPlugins || {};
+        let changed = false;
+        for (const entry of (raw.local || [])) {
+          if (!(entry.id in enabledPlugins)) {
+            enabledPlugins[entry.id] = true;
+            changed = true;
+          }
+        }
+        if (changed) {
+          settings.enabledPlugins = enabledPlugins;
+          saveSettingsLocal(projectRoot, settings);
+        }
+      }
+
       const plugins = buildPluginList(
         { local: raw.local || [], global: raw.global || [] },
         settings.enabledPlugins || {}
       );
+
+      // Case 1: plugins in settings but not installed → show as orphans with install button
+      const installedLocalIds = new Set((raw.local || []).map((e) => e.id));
+      const orphans = Object.keys(settings.enabledPlugins || {})
+        .filter((id) => !installedLocalIds.has(id))
+        .map((id) => {
+          const atIdx = id.indexOf("@");
+          const name = atIdx === -1 ? id : id.slice(0, atIdx);
+          const marketplace = atIdx === -1 ? "" : id.slice(atIdx + 1);
+          return { id, name, marketplace, version: "", pluginScope: "local", skills: [], agents: [], installed: false };
+        });
+      plugins.local = [...plugins.local, ...orphans];
 
       const installedLocal = new Set((raw.local || []).map((e) => e.id));
       const installedGlobal = new Set((raw.global || []).map((e) => e.id));
