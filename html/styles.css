@@ -118,51 +118,147 @@ h1 {
 .theme-btn:hover { color: var(--fg); border-color: var(--fg-muted); }
 .theme-btn.active { border-color: var(--accent); color: var(--accent); }
 
-/* --- Project picker (HTML only) --- */
-.project-picker {
+/* --- Project card --- */
+.project-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.6rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.project-picker input[type="text"] {
-  flex: 1;
-  min-width: 0;
-  background: var(--surface);
+.project-card-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.project-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.project-name {
+  font-size: 0.95rem;
+  font-weight: 700;
   color: var(--fg);
+}
+
+.project-change-btn {
+  background: none;
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 0.3rem 0.5rem;
-  font-size: 0.8rem;
-  font-family: "SFMono-Regular", Consolas, monospace;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  white-space: nowrap;
 }
 
-.project-picker input[type="text"]:focus {
-  outline: none;
+.project-change-btn:hover {
+  color: var(--fg);
   border-color: var(--accent);
 }
 
-.project-picker .error {
-  width: 100%;
-  font-size: 0.75rem;
-  color: #e05c5c;
-  margin-top: 0.1rem;
+.project-picker-expand {
+  display: none;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  gap: 6px;
+  align-items: flex-start;
+  flex-direction: column;
 }
 
-.project-picker .error.hidden { display: none; }
+.project-picker-expand.is-open {
+  display: flex;
+}
 
-/* --- Mock banner --- */
-.mock-banner {
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
-  border-radius: 5px;
-  padding: 0.45rem 0.7rem;
-  font-size: 0.78rem;
-  color: var(--fg-muted);
-  margin-bottom: 0.9rem;
+.project-picker-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.project-picker-input {
+  flex: 1;
+  font-size: 0.8rem;
+  font-family: monospace;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.project-picker-error {
+  font-size: 0.75rem;
+  color: #cc4444;
   display: none;
+}
+
+.project-picker-error.visible {
+  display: block;
+}
+
+/* --- Version badge --- */
+.version-badge {
+  font-size: 0.68rem;
+  font-family: monospace;
+  color: var(--fg-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* --- Global badge --- */
+.global-badge {
+  font-size: 0.68rem;
+  color: var(--fg-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.08rem 0.35rem;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  white-space: nowrap;
+}
+
+/* --- Mock notice --- */
+.mock-notice {
+  font-size: 0.78rem;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  color: #5d4037;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .mock-notice,
+  :root[data-theme="dark"] .mock-notice {
+    background: #3a2e00;
+    border-color: #7a6200;
+    color: #ffe082;
+  }
+}
+
+:root[data-context="vscode"] .mock-notice {
+  background: var(--vscode-inputValidation-warningBackground, #3a2e00);
+  border-color: var(--vscode-inputValidation-warningBorder, #7a6200);
+  color: var(--vscode-editor-foreground);
 }
 
 /* --- Status / Error --- */
