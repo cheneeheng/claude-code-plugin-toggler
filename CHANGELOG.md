@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-15
+
+### Added
+- Marketplace panel with SSE-streamed installs — `/api/install-stream` replaces `/api/install`; install output is shown line-by-line in an inline log area (8bd7d91)
+- Uninstall flow for locally-installed plugins in both HTML and VSCode surfaces (8bd7d91)
+- VSCode webview parity with HTML surface: install/uninstall panel, streaming log area, and marketplace dropdown (8bd7d91)
+- Orphan plugins (present in `settings.json` but absent from `installed_plugins.json`) now appear with an Install button instead of a broken toggle (09a8d29)
+- Auto-sync on startup: installed plugins missing from `settings.json` are added with `enabled: true` so both files stay in sync without manual intervention (09a8d29)
+- Makefile and PowerShell scaffolding for VSCode extension packaging (8bd7d91)
+
+### Fixed
+- Install button and marketplace dropdown overflow at narrow panel widths — `minmax(0,1fr)` grid column and `flex:1;min-width:0` on the select element (c18c31f)
+- `ConnectionAbortedError` (Windows WinError 10053) now caught in SSE handler alongside `BrokenPipeError` (c18c31f)
+- Plugin install error message now surfaces the actual failure reason from the CLI (9f4a857)
+
 ## [0.2.0] - 2026-05-15
 
 ### Added
@@ -72,7 +87,8 @@ NOTE: Should have been 0.1.0 due to new features added.
 - Remove toggle confirmation dialog from VSCode extension to streamline UX (61ee55e)
 - Surface JSON parse errors to the caller instead of crashing silently (2d55100)
 
-[Unreleased]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.0.2...v0.1.0
 [0.0.2]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.0.1...v0.0.2

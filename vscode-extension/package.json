@@ -1,7 +1,7 @@
 {
   "name": "claude-code-plugin-toggler",
   "displayName": "Claude Code Plugin Toggler",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Manage Claude Code skill plugins across projects.",
   "engines": { "vscode": "^1.80.0" },
   "activationEvents": [],
