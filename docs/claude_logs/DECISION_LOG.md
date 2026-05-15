@@ -6,14 +6,18 @@
 
 **Type:** Decision
 **Mode:** Autonomous
-**Timestamp:** 2026-05-13T00:00:00Z
-**Task:** Bind address for html/server.py
+**Timestamp:** 2026-05-15T00:00:00Z
+**Task:** ITER_03 — `_parse_skill_frontmatter` fallback for agent files
 
-**Context:** SKELETON §02 specifies "CORS: localhost only" but does not explicitly set a bind address. `0.0.0.0` and `127.0.0.1` are both valid choices.
-**Decision / Action:** Bound the server to `127.0.0.1` (loopback only).
-**Rationale:** Binding to all interfaces contradicts the localhost-only intent and exposes unauthenticated file read/write to the local network with no upside — no spec use case requires LAN access.
-**Impact / Risk:** Users who want to reach the server from another machine on the LAN cannot. Low risk given the tool's local-dev nature.
-**Outcome:** Server starts on `127.0.0.1:{port}` as confirmed by startup log.
+**Context:** The plan says to reuse `_parse_skill_frontmatter` unchanged for agents. But the existing fallback is `path.parent.name`, which gives "agents" (the directory name) when called with an agent `.md` file path, not the file stem (e.g. `my-agent`).
+
+**Decision / Action:** Added optional `fallback` parameter to `_parse_skill_frontmatter`. When absent it defaults to `path.parent.name` (existing behaviour for skills). `load_plugin_agents` passes `md_file.stem` explicitly.
+
+**Rationale:** Minimum-change fix that keeps skills behaviour identical while giving agents the correct name. The JS version already used explicit fallback names in `parseSkillFrontmatter(text, stem)`.
+
+**Impact / Risk:** Low — the change is backward-compatible. Only agent loading uses the new parameter.
+
+**Outcome:** `_parse_skill_frontmatter` signature changed; all call sites updated.
 
 ---
 
@@ -21,14 +25,18 @@
 
 **Type:** Decision
 **Mode:** Autonomous
-**Timestamp:** 2026-05-13T00:00:00Z
-**Task:** Behaviour when installed_plugins.json is missing
+**Timestamp:** 2026-05-15T00:00:00Z
+**Task:** ITER_03 — Spurious `localIds.add(pluginId)` in plan draft for extension.js
 
-**Context:** SKELETON §05 explicitly states: "server.py returns hardcoded plugin list if installed_plugins.json is missing, clearly marked as mock data in the response." The VSCode extension spec does not repeat this instruction.
-**Decision / Action:** Applied the same mock-data fallback to both surfaces. `GET /api/plugins` returns `"mock": true`; the extension posts `mock: true` in its load message. Both UIs surface a banner.
-**Rationale:** Consistent behaviour across surfaces; the spec intent is clearly developer convenience during setup, not HTML-only.
-**Impact / Risk:** None — mock data is read-only and clearly labelled.
-**Outcome:** Mock banner renders when `installed_plugins.json` is absent.
+**Context:** The plan's `loadInstalledPlugins` JS pseudocode contains `localIds.add(pluginId)` referencing a `localIds` Set that is never declared. It appears to be a leftover from an earlier draft and has no downstream usage in the plan.
+
+**Decision / Action:** Dropped the line. The `local` and `global` arrays are returned directly; no intermediate Set is needed.
+
+**Rationale:** The line would cause a ReferenceError at runtime. The downstream `buildPluginList` and `_onMessage` functions build local ID sets independently where needed.
+
+**Impact / Risk:** None — the line was dead code in the plan.
+
+**Outcome:** `loadInstalledPlugins` in extension.js omits the spurious line.
 
 ---
 
@@ -36,29 +44,18 @@
 
 **Type:** Decision
 **Mode:** Autonomous
-**Timestamp:** 2026-05-13T00:00:00Z
-**Task:** VSCode bulk-toggle implementation
+**Timestamp:** 2026-05-15T00:00:00Z
+**Task:** ITER_03 — Keep `_send_json` name in server.py (plan used `_respond_json`)
 
-**Context:** The extension spec defines a single `{ type: 'toggle' }` message type with a per-toggle `showWarningMessage` confirmation. No bulk-toggle message type is specified. "Enable all" / "Disable all" buttons are required by §05.
-**Decision / Action:** Bulk actions in the webview send one `postMessage` per plugin that needs changing, reusing the existing toggle path.
-**Rationale:** Staying within the specified message contract; no bulk message type exists to handle.
-**Impact / Risk:** N plugins requiring change = N confirmation dialogs — poor UX for bulk actions in VSCode. Not a problem in the HTML version which has no confirmation step.
-**Outcome:** Functional but verbose. Recommend adding a `{ type: 'bulk-toggle', enabled }` message type with a single confirmation in a follow-up iteration.
+**Context:** The plan's handler snippets use `self._respond_json(payload)`. The existing codebase uses `self._send_json`. Renaming would be no-value churn.
 
----
+**Decision / Action:** Kept `_send_json` throughout server.py.
 
-### Entry 005
+**Rationale:** Rename has zero functional value and increases diff noise. Existing name is clear.
 
-**Type:** Decision
-**Mode:** Autonomous
-**Timestamp:** 2026-05-14T00:00:00Z
-**Task:** ITER_02 — Mock plugin skills injection
+**Impact / Risk:** None.
 
-**Context:** ITER_02 §04 specifies that mock plugin dicts should include a `skills` key so the collapsible UI is exercised during development. However, `MOCK_PLUGINS` in both `server.py` and `extension.js` is a flat list of string IDs, not a list of dicts — the `merge()` functions construct dicts. The plan's mock skill note does not account for this structure.
-**Decision / Action:** Added a separate `MOCK_PLUGIN_SKILLS` dict (keyed by plugin ID) in both files. Updated `merge()` in `server.py` to accept an optional `skill_overrides` parameter; the API handler passes `MOCK_PLUGIN_SKILLS` when `mock=True`. In `extension.js`, `_refresh()` checks `mock && MOCK_PLUGIN_SKILLS[p.id]` before calling `loadPluginSkills()`.
-**Rationale:** Avoids restructuring the existing flat `MOCK_PLUGINS` list. Keeps mock skill injection explicit and isolated from the real `load_plugin_skills()` path.
-**Impact / Risk:** None. Mock skills are only injected when `installed_plugins.json` is absent.
-**Outcome:** Both surfaces show "1 skill ▸" per mock plugin in development mode.
+**Outcome:** `_send_json` retained.
 
 ---
 
@@ -66,11 +63,15 @@
 
 **Type:** Decision
 **Mode:** Autonomous
-**Timestamp:** 2026-05-13T00:00:00Z
-**Task:** Default enabled state for plugins absent from settings.local.json
+**Timestamp:** 2026-05-15T00:00:00Z
+**Task:** ITER_03 — `toggleSkills` renamed to `toggleDisclosure` with `data-label` attribute
 
-**Context:** The spec defines `enabledPlugins` as a map of `id → boolean` but does not state what to assume for a plugin that has no entry in the map.
-**Decision / Action:** Plugins with no entry in `enabledPlugins` are treated as `enabled: false`.
-**Rationale:** Opt-in is safer than opt-out — an unknown plugin should not be silently active. Consistent with typical permission defaults.
-**Impact / Risk:** On first run before any toggles, all plugins appear disabled even if the user considers them "on by default." User must explicitly enable each one.
-**Outcome:** `merge()` / `mergePlugins()` default missing keys to `false`.
+**Context:** The plan reuses `toggleSkills` for agents, but the function hardcodes "skill" in the button label. Without a label hint, toggling an agents disclosure would show "N skills" incorrectly.
+
+**Decision / Action:** Renamed `toggleSkills` to `toggleDisclosure` in both HTML files. Added `data-label="skill"` / `data-label="agent"` to the toggle buttons so the function reads the correct noun.
+
+**Rationale:** Minimum change to support both disclosures with correct labels. No new CSS needed.
+
+**Impact / Risk:** Low — internal function rename within the same files. No external callers.
+
+**Outcome:** Both HTML files use `toggleDisclosure`; skills and agents show correct labels.

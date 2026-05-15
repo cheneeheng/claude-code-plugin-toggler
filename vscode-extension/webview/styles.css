@@ -145,7 +145,50 @@ h1 {
 
 .project-picker .error.hidden { display: none; }
 
-/* --- Mock banner --- */
+/* --- Project card --- */
+.project-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-card-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.project-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.project-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+/* --- Version badge --- */
+.version-badge {
+  font-size: 0.68rem;
+  font-family: monospace;
+  color: var(--fg-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.08rem 0.35rem;
+}
+
+/* --- Mock banner (legacy) --- */
 .mock-banner {
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
@@ -155,6 +198,35 @@ h1 {
   color: var(--fg-muted);
   margin-bottom: 0.9rem;
   display: none;
+}
+
+/* --- Mock notice --- */
+.mock-notice {
+  font-size: 0.78rem;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  color: #5d4037;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .mock-notice,
+  :root[data-theme="dark"] .mock-notice {
+    background: #3a2e00;
+    border-color: #7a6200;
+    color: #ffe082;
+  }
+}
+
+:root[data-context="vscode"] .mock-notice {
+  background: var(--vscode-inputValidation-warningBackground, #3a2e00);
+  border-color: var(--vscode-inputValidation-warningBorder, #7a6200);
+  color: var(--vscode-editor-foreground);
 }
 
 /* --- Status / Error --- */

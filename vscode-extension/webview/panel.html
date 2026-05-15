@@ -14,11 +14,19 @@
 <body>
   <header>
     <h1>Skills Toggle</h1>
-    <div class="project-path" id="project-path"></div>
   </header>
 
-  <div class="mock-banner" id="mock-banner">
-    Mock data — <code>~/.claude/plugins/installed_plugins.json</code> not found.
+  <div class="project-card" id="project-card">
+    <div class="project-label">PROJECT</div>
+    <div class="project-card-row">
+      <span class="project-name" id="project-name"></span>
+    </div>
+    <div class="project-path" id="project-path"></div>
+  </div>
+
+  <div class="mock-notice" id="mock-notice" style="display:none">
+    &#9888; Mock data &#8212; <code>~/.claude/plugins/installed_plugins.json</code> not found.
+    <button onclick="document.getElementById('mock-notice').style.display='none'">&#10005;</button>
   </div>
 
   <div id="status" class="status">Loading plugins...</div>
@@ -26,14 +34,12 @@
 
   <div id="plugin-sections" style="display:none">
     <div id="local-section">
-      <div class="section-title">Local</div>
-      <div class="section-desc">Plugins with project-specific overrides written to <code>.claude/settings.local.json</code>.</div>
+      <div class="section-title">Local plugins</div>
       <div class="plugin-list" id="local-list"></div>
     </div>
-    <div id="inherited-section">
-      <div class="section-title">Inherited</div>
-      <div class="section-desc">Plugins using the global default state — no local override set for this project.</div>
-      <div class="plugin-list" id="inherited-list"></div>
+    <div id="global-section">
+      <div class="section-title">Global plugins</div>
+      <div class="plugin-list" id="global-list"></div>
     </div>
   </div>
 
@@ -44,15 +50,21 @@
 
   <script>
     const vscode = acquireVsCodeApi();
-    let plugins = [];
+    let state = { local: [], global: [] };
 
     window.addEventListener("message", (event) => {
       const msg = event.data;
       if (msg.type === "load") {
-        plugins = msg.plugins || [];
-        document.getElementById("project-path").textContent = msg.projectRoot || "";
-        document.getElementById("mock-banner").style.display = msg.mock ? "block" : "none";
+        const projectRoot = msg.projectRoot || "";
+        const folderName = projectRoot
+          ? projectRoot.replace(/\\/g, "/").split("/").filter(Boolean).pop() || projectRoot
+          : "";
+        document.getElementById("project-name").textContent = folderName;
+        document.getElementById("project-path").textContent = projectRoot;
+        document.getElementById("mock-notice").style.display = msg.mock ? "flex" : "none";
         document.getElementById("error").style.display = "none";
+        state.local = (msg.plugins && msg.plugins.local) || [];
+        state.global = (msg.plugins && msg.plugins.global) || [];
         renderPlugins();
       } else if (msg.type === "error") {
         showError(msg.message);
@@ -63,8 +75,8 @@
       const sections = document.getElementById("plugin-sections");
       const bulk = document.getElementById("bulk-actions");
 
-      if (plugins.length === 0) {
-        showStatus("No plugins installed. Install plugins to <code>~/.claude/plugins/</code>.");
+      if (state.local.length === 0 && state.global.length === 0) {
+        showStatus("No plugins found for this project. Install plugins via Claude Code.");
         sections.style.display = "none";
         bulk.style.display = "none";
         return;
@@ -74,59 +86,65 @@
       sections.style.display = "block";
       bulk.style.display = "flex";
 
-      const local = plugins.filter((p) => p.scope === "local");
-      const inherited = plugins.filter((p) => p.scope !== "local");
+      document.getElementById("local-section").style.display =
+        state.local.length ? "block" : "none";
+      document.getElementById("global-section").style.display =
+        state.global.length ? "block" : "none";
 
-      document.getElementById("local-section").style.display = local.length ? "block" : "none";
-      document.getElementById("inherited-section").style.display = inherited.length ? "block" : "none";
-
-      document.getElementById("local-list").innerHTML = local.map(localRowHtml).join("");
-      document.getElementById("inherited-list").innerHTML = inherited.map(inheritedRowHtml).join("");
+      document.getElementById("local-list").innerHTML =
+        state.local.map(localRowHtml).join("");
+      document.getElementById("global-list").innerHTML =
+        state.global.map(globalRowHtml).join("");
 
       document.querySelectorAll(".toggle").forEach((el) => {
         el.addEventListener("change", (e) => {
           const id = e.target.dataset.id;
           const enabled = e.target.checked;
-          const p = plugins.find((x) => x.id === id);
+          const p = state.local.find((x) => x.id === id);
           if (p) p.enabled = enabled;
           vscode.postMessage({ type: "toggle", id, enabled });
-        });
-      });
-
-      document.querySelectorAll(".override-btn").forEach((el) => {
-        el.addEventListener("click", (e) => {
-          const id = e.target.dataset.id;
-          const p = plugins.find((x) => x.id === id);
-          if (!p) return;
-          // Pin current state; extension handles confirmation and write.
-          vscode.postMessage({ type: "toggle", id, enabled: p.enabled });
         });
       });
     }
 
     function renderSkillsDisclosure(skills) {
       if (!skills || skills.length === 0) return "";
-      const skillRows = skills.map((s) => `
+      const rows = skills.map((s) => `
         <div class="skill-row">
           <div class="skill-name">${esc(s.name)}</div>
           ${s.description ? `<div class="skill-description">${esc(s.description)}</div>` : ""}
         </div>`).join("");
       return `
         <div class="skills-disclosure">
-          <button class="skills-toggle-btn" onclick="toggleSkills(this)">
+          <button class="skills-toggle-btn" data-label="skill" onclick="toggleDisclosure(this)">
             ${skills.length} skill${skills.length !== 1 ? "s" : ""} &#9658;
           </button>
-          <div class="skills-list">
-            ${skillRows}
-          </div>
+          <div class="skills-list">${rows}</div>
         </div>`;
     }
 
-    function toggleSkills(btn) {
+    function renderAgentsDisclosure(agents) {
+      if (!agents || agents.length === 0) return "";
+      const rows = agents.map((a) => `
+        <div class="skill-row">
+          <div class="skill-name">${esc(a.name)}</div>
+          ${a.description ? `<div class="skill-description">${esc(a.description)}</div>` : ""}
+        </div>`).join("");
+      return `
+        <div class="skills-disclosure">
+          <button class="skills-toggle-btn" data-label="agent" onclick="toggleDisclosure(this)">
+            ${agents.length} agent${agents.length !== 1 ? "s" : ""} &#9658;
+          </button>
+          <div class="skills-list">${rows}</div>
+        </div>`;
+    }
+
+    function toggleDisclosure(btn) {
       const list = btn.nextElementSibling;
       const open = list.classList.toggle("is-open");
       const count = list.querySelectorAll(".skill-row").length;
-      btn.textContent = `${count} skill${count !== 1 ? "s" : ""} ${open ? "▾" : "▸"}`;
+      const label = btn.dataset.label || "skill";
+      btn.textContent = `${count} ${label}${count !== 1 ? "s" : ""} ${open ? "▾" : "▸"}`;
     }
 
     function localRowHtml(p) {
@@ -135,7 +153,9 @@
           <div class="plugin-info">
             <span class="plugin-name">${esc(p.name)}</span>
             ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
+            ${p.version ? `<span class="version-badge">v${esc(p.version)}</span>` : ""}
             ${renderSkillsDisclosure(p.skills)}
+            ${renderAgentsDisclosure(p.agents)}
           </div>
           <div class="toggle-wrap">
             <input type="checkbox" class="toggle" data-id="${esc(p.id)}"
@@ -144,22 +164,21 @@
         </div>`;
     }
 
-    function inheritedRowHtml(p) {
+    function globalRowHtml(p) {
       return `
-        <div class="plugin-row inherited" data-id="${esc(p.id)}">
+        <div class="plugin-row" data-id="${esc(p.id)}">
           <div class="plugin-info">
             <span class="plugin-name">${esc(p.name)}</span>
             ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
+            ${p.version ? `<span class="version-badge">v${esc(p.version)}</span>` : ""}
             ${renderSkillsDisclosure(p.skills)}
-          </div>
-          <div class="row-actions">
-            <button class="override-btn" data-id="${esc(p.id)}">Localize</button>
+            ${renderAgentsDisclosure(p.agents)}
           </div>
         </div>`;
     }
 
     function bulkToggle(enabled) {
-      for (const p of plugins.filter((x) => x.scope === "local")) {
+      for (const p of state.local) {
         if (p.enabled !== enabled) {
           p.enabled = enabled;
           vscode.postMessage({ type: "toggle", id: p.id, enabled });

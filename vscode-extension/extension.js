@@ -3,24 +3,72 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const INSTALLED_PLUGINS_PATH = path.join(
-  os.homedir(),
-  ".claude",
-  "plugins",
-  "installed_plugins.json"
-);
+function _mockPlugins() {
+  return {
+    local: [
+      { id: "ceh-dev-tools@ceh-plugins", version: "1.1.0", installPath: "" },
+    ],
+    global: [
+      { id: "frontend-design@anthropic", version: "2.0.1", installPath: "" },
+    ],
+    mock: true,
+  };
+}
 
-function loadInstalledPlugins() {
-  if (!fs.existsSync(INSTALLED_PLUGINS_PATH)) return null;
+function loadInstalledPlugins(projectRoot) {
+  const installedPath = path.join(
+    os.homedir(),
+    ".claude",
+    "plugins",
+    "installed_plugins.json"
+  );
+  if (!fs.existsSync(installedPath)) return _mockPlugins();
+
   try {
-    const data = JSON.parse(fs.readFileSync(INSTALLED_PLUGINS_PATH, "utf8"));
-    const result = {};
-    for (const [id, records] of Object.entries(data.plugins || {})) {
-      result[id] = Array.isArray(records) && records.length > 0 ? (records[0].installPath || "") : "";
+    const raw = JSON.parse(fs.readFileSync(installedPath, "utf8"))['plugins'];
+    const normProject = path.resolve(projectRoot);
+    const local = [],
+      global_ = [];
+
+    for (const [pluginId, entries] of Object.entries(raw)) {
+      let localEntry = null,
+        globalEntry = null;
+
+      for (const entry of entries) {
+        const isLocal = entry.scope === "local";
+        const entryProject = entry.projectPath
+          ? path.resolve(entry.projectPath)
+          : null;
+        const matchesProject = entryProject === normProject;
+
+        if (isLocal && matchesProject) {
+          localEntry = entry;
+          break;
+        }
+        if (!isLocal && !globalEntry) globalEntry = entry;
+        // local-scoped entries for OTHER projects are intentionally ignored
+      }
+
+      if (localEntry) {
+        local.push({
+          id: pluginId,
+          version: localEntry.version || "",
+          installPath: localEntry.installPath || "",
+        });
+      } else if (globalEntry) {
+        global_.push({
+          id: pluginId,
+          version: globalEntry.version || "",
+          installPath: globalEntry.installPath || "",
+        });
+      }
     }
-    return result;
+
+    return { local, global: global_ };
   } catch (e) {
-    throw new Error(`Failed to parse ${INSTALLED_PLUGINS_PATH}: ${e.message}`);
+    throw new Error(
+      `Failed to parse installed_plugins.json: ${e.message}`
+    );
   }
 }
 
@@ -42,33 +90,6 @@ function saveSettingsLocal(projectRoot, settings) {
     JSON.stringify(settings, null, 2)
   );
 }
-
-function mergePlugins(pluginIds, settings) {
-  const enabledMap = settings.enabledPlugins || {};
-  return pluginIds.map((id) => {
-    const [name, marketplace = ""] = id.split("@");
-    const inLocal = id in enabledMap;
-    return {
-      id,
-      name,
-      marketplace,
-      // Inherited plugins default to enabled until a global settings file says otherwise.
-      enabled: inLocal ? enabledMap[id] === true : true,
-      scope: inLocal ? "local" : "inherited",
-    };
-  });
-}
-
-const MOCK_PLUGINS = ["frontend-design@anthropic", "docx@anthropic"];
-
-const MOCK_PLUGIN_SKILLS = {
-  "frontend-design@anthropic": [
-    { name: "mock-skill", description: "Placeholder skill for development." },
-  ],
-  "docx@anthropic": [
-    { name: "mock-skill", description: "Placeholder skill for development." },
-  ],
-};
 
 function parseSkillFrontmatter(text, fallbackName) {
   const fmMatch = text.match(/^---\s*\n([\s\S]*?)\n---/);
@@ -96,28 +117,59 @@ function parseSkillFrontmatter(text, fallbackName) {
   return { name, description };
 }
 
-function loadPluginSkills(pluginId, installPath) {
-  const skillsDir = installPath
-    ? path.join(installPath, "skills")
-    : (() => {
-        const [pluginName, marketplace] = pluginId.split("@");
-        return path.join(os.homedir(), ".claude", "plugins", "marketplaces", marketplace, pluginName, "skills");
-      })();
+function loadPluginSkills(installPath) {
+  if (!installPath) return [];
+  const skillsDir = path.join(installPath, "skills");
   if (!fs.existsSync(skillsDir)) return [];
 
   return fs
     .readdirSync(skillsDir)
-    .filter((f) => fs.statSync(path.join(skillsDir, f)).isDirectory())
+    .filter((name) => fs.statSync(path.join(skillsDir, name)).isDirectory())
     .sort()
-    .map((skillDirName) => {
-      const skillMd = path.join(skillsDir, skillDirName, "SKILL.md");
-      try {
-        const text = fs.readFileSync(skillMd, "utf8");
-        return parseSkillFrontmatter(text, skillDirName);
-      } catch {
-        return { name: skillDirName, description: "" };
-      }
+    .filter((folderName) => fs.existsSync(path.join(skillsDir, folderName, "SKILL.md")))
+    .map((folderName) => {
+      const text = fs.readFileSync(path.join(skillsDir, folderName, "SKILL.md"), "utf8");
+      return parseSkillFrontmatter(text, folderName);
     });
+}
+
+function loadPluginAgents(installPath) {
+  if (!installPath) return [];
+  const agentsDir = path.join(installPath, "agents");
+  if (!fs.existsSync(agentsDir)) return [];
+
+  return fs
+    .readdirSync(agentsDir)
+    .filter((f) => f.endsWith(".md"))
+    .sort()
+    .map((f) => {
+      const stem = path.basename(f, ".md");
+      const text = fs.readFileSync(path.join(agentsDir, f), "utf8");
+      return parseSkillFrontmatter(text, stem);
+    });
+}
+
+function buildPluginList(raw, enabledMap) {
+  function build(entry, pluginScope) {
+    const atIdx = entry.id.indexOf("@");
+    const name = atIdx === -1 ? entry.id : entry.id.slice(0, atIdx);
+    const marketplace = atIdx === -1 ? "" : entry.id.slice(atIdx + 1);
+    const result = {
+      id: entry.id,
+      name,
+      marketplace,
+      version: entry.version || "",
+      pluginScope,
+      skills: loadPluginSkills(entry.installPath),
+      agents: loadPluginAgents(entry.installPath),
+    };
+    if (pluginScope === "local") result.enabled = enabledMap[entry.id] ?? true;
+    return result;
+  }
+  return {
+    local: raw.local.map((e) => build(e, "local")),
+    global: raw.global.map((e) => build(e, "global")),
+  };
 }
 
 class SkillsViewProvider {
@@ -158,18 +210,14 @@ class SkillsViewProvider {
       return;
     }
     try {
-      let pluginsMap = loadInstalledPlugins();
-      const mock = pluginsMap === null;
-      if (mock) pluginsMap = Object.fromEntries(MOCK_PLUGINS.map((p) => [p, ""]));
+      const raw = loadInstalledPlugins(projectRoot);
+      const isMock = raw.mock || false;
       const settings = loadSettingsLocal(projectRoot);
-      const plugins = mergePlugins(Object.keys(pluginsMap), settings);
-      for (const p of plugins) {
-        const installPath = mock ? "" : (pluginsMap[p.id] || "");
-        p.skills = mock && MOCK_PLUGIN_SKILLS[p.id]
-          ? MOCK_PLUGIN_SKILLS[p.id]
-          : loadPluginSkills(p.id, installPath);
-      }
-      webview.postMessage({ type: "load", plugins, projectRoot, mock });
+      const plugins = buildPluginList(
+        { local: raw.local || [], global: raw.global || [] },
+        settings.enabledPlugins || {}
+      );
+      webview.postMessage({ type: "load", plugins, projectRoot, mock: isMock });
     } catch (e) {
       webview.postMessage({ type: "error", message: e.message });
     }
@@ -181,6 +229,11 @@ class SkillsViewProvider {
     const { id, enabled } = msg;
     const projectRoot = this._projectRoot();
     if (!projectRoot) return;
+
+    // Guard: only local plugins can be toggled
+    const raw = loadInstalledPlugins(projectRoot);
+    const localIds = new Set((raw.local || []).map((e) => e.id));
+    if (!localIds.has(id)) return;
 
     const settings = loadSettingsLocal(projectRoot);
     if (!settings.enabledPlugins) settings.enabledPlugins = {};
@@ -196,7 +249,6 @@ class SkillsViewProvider {
       "panel.html"
     );
     let html = fs.readFileSync(panelHtmlPath.fsPath, "utf8");
-    // Inject the resolved styles URI in place of the placeholder.
     html = html.replace("__STYLES_URI__", stylesUri.toString());
     return html;
   }

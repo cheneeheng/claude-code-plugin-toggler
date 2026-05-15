@@ -6,28 +6,16 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-INSTALLED_PLUGINS_PATH = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-PLUGINS_DIR = Path.home() / ".claude" / "plugins" / "marketplaces"
 
-MOCK_PLUGINS = ["frontend-design@anthropic", "docx@anthropic"]
-
-MOCK_PLUGIN_SKILLS = {
-    "frontend-design@anthropic": [
-        {"name": "mock-skill", "description": "Placeholder skill for development."}
-    ],
-    "docx@anthropic": [
-        {"name": "mock-skill", "description": "Placeholder skill for development."}
-    ],
-}
-
-
-def _parse_skill_frontmatter(path: Path) -> tuple[str, str]:
+def _parse_skill_frontmatter(path: Path, fallback: str = "") -> tuple[str, str]:
     """
     Returns (name, description) from YAML front matter.
     Uses regex — no PyYAML dependency.
-    Falls back to skill directory name if front matter is absent or keys are missing.
+    fallback: used when name key is absent. Defaults to path.parent.name (skill folder name).
+    Pass path.stem explicitly for agent .md files so the stem not the parent dir is used.
     """
-    fallback = path.parent.name
+    if not fallback:
+        fallback = path.parent.name
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
         m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
@@ -53,46 +41,111 @@ def _parse_skill_frontmatter(path: Path) -> tuple[str, str]:
         return fallback, ""
 
 
-def load_plugin_skills(plugin_id: str, install_path: str = "") -> list[dict[str, str]]:
+def _mock_plugins() -> dict:
+    return {
+        "local": [
+            {"id": "ceh-dev-tools@ceh-plugins", "version": "1.1.0", "installPath": ""}
+        ],
+        "global": [
+            {"id": "frontend-design@anthropic", "version": "2.0.1", "installPath": ""}
+        ],
+        "mock": True,
+    }
+
+
+def load_installed_plugins(project_root: Path) -> dict:
     """
-    Returns a list of {"name": str, "description": str} dicts.
-    Prefers install_path/skills/ (from installed_plugins.json) so the path is
-    marketplace-agnostic. Falls back to marketplaces/<marketplace>/<name>/skills/.
+    Returns { "local": [...], "global": [...] }
+    Each entry: { "id", "version", "installPath" }
+
+    Local  = scope=="local" and projectPath matches project_root (path-normalised).
+    Global = scope!="local" OR no projectPath field.
+
+    If a plugin id appears in both local (for this project) and global entries,
+    it is placed in local only — local wins.
+
+    If installed_plugins.json is missing, returns mock data (includes "mock": True).
     """
-    if install_path:
-        skills_dir = Path(install_path) / "skills"
-    else:
-        plugin_name, marketplace = plugin_id.split("@", 1)
-        skills_dir = PLUGINS_DIR / marketplace / plugin_name / "skills"
+    installed_path = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+    if not installed_path.exists():
+        return _mock_plugins()
+
+    raw = json.loads(installed_path.read_text(encoding="utf-8"))['plugins']
+    norm_project = str(Path(project_root).resolve())
+
+    local_result: list[dict] = []
+    global_result: list[dict] = []
+
+    for plugin_id, entries in raw.items():
+        local_entry = None
+        global_entry = None
+
+        for entry in entries:
+            is_local_scope = entry.get("scope") == "local"
+            entry_project = entry.get("projectPath", "")
+            matches_project = (
+                str(Path(entry_project).resolve()) == norm_project if entry_project else False
+            )
+
+            if is_local_scope and matches_project:
+                local_entry = entry
+                break
+            elif not is_local_scope and global_entry is None:
+                global_entry = entry
+            # local-scoped entries for OTHER projects are intentionally ignored
+
+        if local_entry:
+            local_result.append({
+                "id": plugin_id,
+                "version": local_entry.get("version", ""),
+                "installPath": local_entry.get("installPath", ""),
+            })
+        elif global_entry:
+            global_result.append({
+                "id": plugin_id,
+                "version": global_entry.get("version", ""),
+                "installPath": global_entry.get("installPath", ""),
+            })
+
+    return {"local": local_result, "global": global_result}
+
+
+def load_plugin_skills(install_path: str) -> list[dict]:
+    """Reads all skill folders under <install_path>/skills/."""
+    if not install_path:
+        return []
+    skills_dir = Path(install_path) / "skills"
     if not skills_dir.is_dir():
         return []
+
     skills = []
-    for skill_dir in sorted(d for d in skills_dir.iterdir() if d.is_dir()):
-        skill_md = skill_dir / "SKILL.md"
-        name, description = _parse_skill_frontmatter(skill_md) if skill_md.exists() else (skill_dir.name, "")
+    for skill_folder in sorted(skills_dir.iterdir()):
+        if not skill_folder.is_dir():
+            continue
+        skill_md = skill_folder / "SKILL.md"
+        if not skill_md.exists():
+            continue
+        name, description = _parse_skill_frontmatter(skill_md)
         skills.append({"name": name, "description": description})
     return skills
 
 
-def load_installed_plugins() -> dict[str, str] | None:
-    """Returns {plugin_id: install_path} or None to signal mock mode."""
-    if not INSTALLED_PLUGINS_PATH.exists():
-        return None
-    try:
-        with open(INSTALLED_PLUGINS_PATH) as f:
-            data = json.load(f)
-    except json.JSONDecodeError as e:
-        raise ValueError(str(INSTALLED_PLUGINS_PATH)) from e
-    result: dict[str, str] = {}
-    for plugin_id, records in data.get("plugins", {}).items():
-        install_path = ""
-        if isinstance(records, list) and records:
-            install_path = records[0].get("installPath", "")
-        result[plugin_id] = install_path
-    return result
+def load_plugin_agents(install_path: str) -> list[dict]:
+    """Reads all .md files directly under <install_path>/agents/."""
+    if not install_path:
+        return []
+    agents_dir = Path(install_path) / "agents"
+    if not agents_dir.is_dir():
+        return []
+
+    agents = []
+    for md_file in sorted(agents_dir.glob("*.md")):
+        name, description = _parse_skill_frontmatter(md_file, fallback=md_file.stem)
+        agents.append({"name": name, "description": description})
+    return agents
 
 
-def load_settings_local(project_root: Path) -> dict[str, object]:
+def load_settings_local(project_root: Path) -> dict:
     path = project_root / ".claude" / "settings.local.json"
     if not path.exists():
         return {}
@@ -103,7 +156,7 @@ def load_settings_local(project_root: Path) -> dict[str, object]:
         raise ValueError(str(path)) from e
 
 
-def save_settings_local(project_root: Path, settings: dict[str, object]) -> None:
+def save_settings_local(project_root: Path, settings: dict) -> None:
     dir_ = project_root / ".claude"
     dir_.mkdir(parents=True, exist_ok=True)
     path = dir_ / "settings.local.json"
@@ -111,32 +164,35 @@ def save_settings_local(project_root: Path, settings: dict[str, object]) -> None
         json.dump(settings, f, indent=2)
 
 
-def merge(
-    plugins_map: dict[str, str],
-    settings: dict[str, object],
-    skill_overrides: dict[str, list] | None = None,
-) -> list[dict[str, object]]:
+def merge(raw: dict, settings: dict) -> dict:
+    """
+    raw = { "local": [...], "global": [...] } from load_installed_plugins() (mock key already removed)
+    settings = dict from load_settings_local()
+    Returns { "local": [...], "global": [...] } with full plugin dicts.
+    """
     enabled_map = settings.get("enabledPlugins", {})
-    result = []
-    for pid, install_path in plugins_map.items():
-        parts = pid.split("@", 1)
-        name = parts[0]
-        marketplace = parts[1] if len(parts) > 1 else ""
-        in_local = pid in enabled_map
-        if skill_overrides is not None and pid in skill_overrides:
-            skills = skill_overrides[pid]
-        else:
-            skills = load_plugin_skills(pid, install_path)
-        result.append({
+
+    def build(entry: dict, plugin_scope: str) -> dict:
+        pid = entry["id"]
+        name, marketplace = pid.split("@", 1)
+        install_path = entry.get("installPath", "")
+        result: dict = {
             "id": pid,
             "name": name,
             "marketplace": marketplace,
-            # Inherited plugins default to enabled until a global settings file says otherwise.
-            "enabled": enabled_map.get(pid, True),
-            "scope": "local" if in_local else "inherited",
-            "skills": skills,
-        })
-    return result
+            "version": entry.get("version", ""),
+            "pluginScope": plugin_scope,
+            "skills": load_plugin_skills(install_path),
+            "agents": load_plugin_agents(install_path),
+        }
+        if plugin_scope == "local":
+            result["enabled"] = enabled_map.get(pid, True)
+        return result
+
+    return {
+        "local":  [build(e, "local")  for e in raw["local"]],
+        "global": [build(e, "global") for e in raw["global"]],
+    }
 
 
 class PluginServer(HTTPServer):
@@ -192,24 +248,18 @@ class RequestHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/plugins":
             project_root = self.server.project_root
             try:
-                plugins_map = load_installed_plugins()
-                mock = plugins_map is None
-                if mock:
-                    plugins_map = {p: "" for p in MOCK_PLUGINS}
+                raw = load_installed_plugins(project_root)
+                is_mock = raw.pop("mock", False)
                 settings = load_settings_local(project_root)
+                merged = merge(raw, settings)
             except ValueError as exc:
                 failed_path = str(exc)
                 self._send_json(
-                    {"error": f"Failed to parse {failed_path}", "path": failed_path},
-                    500,
+                    {"error": f"Failed to parse {failed_path}", "path": failed_path}, 500
                 )
                 return
-            plugins = merge(plugins_map, settings, skill_overrides=MOCK_PLUGIN_SKILLS if mock else None)
-            payload = {
-                "plugins": plugins,
-                "project_root": str(project_root),
-            }
-            if mock:
+            payload = {**merged, "project_root": str(project_root)}
+            if is_mock:
                 payload["mock"] = True
             self._send_json(payload)
 
@@ -226,6 +276,14 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "invalid payload"}, 400)
                 return
             project_root = self.server.project_root
+            raw = load_installed_plugins(project_root)
+            raw.pop("mock", None)
+            local_ids = {e["id"] for e in raw.get("local", [])}
+            if plugin_id not in local_ids:
+                self._send_json(
+                    {"ok": False, "error": "Plugin is not installed locally for this project"}, 400
+                )
+                return
             settings = load_settings_local(project_root)
             if "enabledPlugins" not in settings:
                 settings["enabledPlugins"] = {}
