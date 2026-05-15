@@ -12,6 +12,7 @@ cd /your/project
 python3 /path/to/html/server.py        # port 7779
 python3 /path/to/html/server.py 8080   # custom port
 ```
+Convenience scripts: `html/start.sh` (Linux/macOS), `html/start.ps1` / `html/start.bat` (Windows).
 
 **VSCode extension dev:** `F5` in VSCode → command palette → `Skills: Manage Plugins`
 
@@ -19,6 +20,13 @@ python3 /path/to/html/server.py 8080   # custom port
 ```bash
 cd vscode-extension && vsce package
 ```
+`prepackage` hook auto-runs CSS sync; no manual step needed before packaging.
+
+**CSS sync** — `html/styles.css` is canonical. After any edit to it:
+```bash
+make sync-css   # or: powershell scripts/sync-css.ps1
+```
+Do not edit `vscode-extension/webview/styles.css` directly — it is overwritten by this command.
 
 ## Architecture
 

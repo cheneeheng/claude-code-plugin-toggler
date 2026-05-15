@@ -500,6 +500,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   padding: 12px 14px;
   margin-top: 12px;
   background: var(--surface);
+  overflow: hidden;
 }
 
 .install-panel.is-open {
@@ -548,6 +549,8 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   border-radius: 4px;
   background: var(--bg);
   color: var(--fg);
+  flex: 1;
+  min-width: 0;
 }
 
 /* --- Marketplace plugin rows --- */
@@ -559,7 +562,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .mp-plugin-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 4px 10px;
   align-items: start;
   padding: 8px 10px;

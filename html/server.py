@@ -468,7 +468,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                         # Send SSE comment as keepalive to prevent proxy/browser timeouts
                         self.wfile.write(b": keepalive\n\n")
                         self.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                 pass
             finally:
                 self.server.remove_sse_client(q)
