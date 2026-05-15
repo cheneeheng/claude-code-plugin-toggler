@@ -70,7 +70,7 @@ def load_installed_plugins(project_root: Path) -> dict:
     if not installed_path.exists():
         return _mock_plugins()
 
-    raw = json.loads(installed_path.read_text(encoding="utf-8"))
+    raw = json.loads(installed_path.read_text(encoding="utf-8"))['plugins']
     norm_project = str(Path(project_root).resolve())
 
     local_result: list[dict] = []
@@ -124,9 +124,8 @@ def load_plugin_skills(install_path: str) -> list[dict]:
             continue
         skill_md = skill_folder / "SKILL.md"
         if not skill_md.exists():
-            name, description = skill_folder.name, ""
-        else:
-            name, description = _parse_skill_frontmatter(skill_md)
+            continue
+        name, description = _parse_skill_frontmatter(skill_md)
         skills.append({"name": name, "description": description})
     return skills
 

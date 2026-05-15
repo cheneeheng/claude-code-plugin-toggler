@@ -25,7 +25,7 @@ function loadInstalledPlugins(projectRoot) {
   if (!fs.existsSync(installedPath)) return _mockPlugins();
 
   try {
-    const raw = JSON.parse(fs.readFileSync(installedPath, "utf8"));
+    const raw = JSON.parse(fs.readFileSync(installedPath, "utf8"))['plugins'];
     const normProject = path.resolve(projectRoot);
     const local = [],
       global_ = [];
@@ -126,10 +126,9 @@ function loadPluginSkills(installPath) {
     .readdirSync(skillsDir)
     .filter((name) => fs.statSync(path.join(skillsDir, name)).isDirectory())
     .sort()
+    .filter((folderName) => fs.existsSync(path.join(skillsDir, folderName, "SKILL.md")))
     .map((folderName) => {
-      const skillMd = path.join(skillsDir, folderName, "SKILL.md");
-      if (!fs.existsSync(skillMd)) return { name: folderName, description: "" };
-      const text = fs.readFileSync(skillMd, "utf8");
+      const text = fs.readFileSync(path.join(skillsDir, folderName, "SKILL.md"), "utf8");
       return parseSkillFrontmatter(text, folderName);
     });
 }

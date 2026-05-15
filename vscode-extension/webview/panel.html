@@ -171,7 +171,6 @@
             <span class="plugin-name">${esc(p.name)}</span>
             ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
             ${p.version ? `<span class="version-badge">v${esc(p.version)}</span>` : ""}
-            <span class="global-badge" title="Always active. Managed globally, not per-project.">global</span>
             ${renderSkillsDisclosure(p.skills)}
             ${renderAgentsDisclosure(p.agents)}
           </div>

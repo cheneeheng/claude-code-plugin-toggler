@@ -212,24 +212,10 @@ h1 {
   font-size: 0.68rem;
   font-family: monospace;
   color: var(--fg-muted);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 1px 5px;
-  margin-left: 4px;
-  vertical-align: middle;
-}
-
-/* --- Global badge --- */
-.global-badge {
-  font-size: 0.68rem;
-  color: var(--fg-muted);
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 0.08rem 0.35rem;
-  font-family: "SFMono-Regular", Consolas, monospace;
-  white-space: nowrap;
 }
 
 /* --- Mock notice --- */
