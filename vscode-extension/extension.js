@@ -494,16 +494,6 @@ class SkillsViewProvider {
       const projectRoot = this._projectRoot();
       if (!projectRoot) return;
 
-      const confirmed = await vscode.window.showWarningMessage(
-        `Install "${id}" locally for this project?`,
-        "Install",
-        "Cancel"
-      );
-      if (confirmed !== "Install") {
-        this._refresh(webview);
-        return;
-      }
-
       webview.postMessage({ type: "installStart", id });
 
       try {
