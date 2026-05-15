@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-15
+
+### Added
+- Load agents from `.md` files under `agents/` directory per plugin, displayed in a dedicated agents disclosure alongside skills (271f647)
+- Version badge per plugin row showing the installed plugin version (271f647)
+- Global badge on global-scope plugin rows to distinguish scope visually (271f647)
+- Collapsible path picker (HTML) and card header (VSCode) in the redesigned project card (271f647)
+
+### Changed
+- Refactor plugin loading to return `{ local, global }` arrays based on scope and `projectPath` matching, replacing the previous inherited/scope terminology (271f647)
+- Toggle disclosure label uses `data-label` attribute (renamed `toggleSkills` to `toggleDisclosure`) to display the correct noun per section (271f647)
+- Guard toggle endpoint to reject non-local plugin IDs (271f647)
+- Mock plugin structure updated to match `{ local, global }` shape of real data (271f647)
+
+### Fixed
+- Skip skill folders that lack a `SKILL.md` file in both `server.py` and `extension.js` (72ca34b)
+- Remove redundant global badge from global plugin rows; section heading already conveys scope (72ca34b)
+- Align version badge styling to match marketplace badge using shared design tokens (72ca34b)
+- Remove `margin-left`/`vertical-align` from version badge to fix column-layout indent (72ca34b)
+
 ## [0.1.0] - 2026-05-14
 
 ### Added
@@ -52,7 +72,8 @@ NOTE: Should have been 0.1.0 due to new features added.
 - Remove toggle confirmation dialog from VSCode extension to streamline UX (61ee55e)
 - Surface JSON parse errors to the caller instead of crashing silently (2d55100)
 
-[Unreleased]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.0.2...v0.1.0
 [0.0.2]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/cheneeheng/claude-code-plugin-toggler/releases/tag/v0.0.1
