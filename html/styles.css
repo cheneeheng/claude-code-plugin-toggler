@@ -374,7 +374,10 @@ h1 {
 /* --- Bulk actions --- */
 .bulk-actions {
   display: flex;
-  gap: 0.4rem;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 0.5rem;
 }
 
@@ -420,15 +423,23 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   padding: 0;
 }
 
+/* ITER_05: max-height transition replaces display:none/block for smooth expand/collapse */
 .skills-list {
-  display: none;
-  margin-top: 6px;
+  max-height: 0;
+  overflow: hidden;
+  margin-top: 0;
   padding-left: 12px;
-  border-left: 2px solid var(--border);
+  border-left: 2px solid transparent;
+  transition:
+    max-height 200ms ease-out,
+    margin-top 200ms ease-out,
+    border-color 200ms ease-out;
 }
 
 .skills-list.is-open {
-  display: block;
+  max-height: 600px;
+  margin-top: 6px;
+  border-left-color: var(--border);
 }
 
 .skill-row {
@@ -445,4 +456,234 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   font-size: 0.75rem;
   color: var(--fg-muted);
   margin-top: 1px;
+}
+
+/* --- Live dot (ITER_06 SSE indicator) --- */
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3a8a3a;
+  margin-left: 8px;
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+
+.live-dot.connected {
+  opacity: 1;
+}
+
+.live-dot.reconnecting {
+  background: #cc8800;
+  opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .live-dot.connected,
+  :root:not([data-theme]) .live-dot.reconnecting {
+    filter: brightness(1.3);
+  }
+}
+
+:root[data-theme="dark"] .live-dot.connected,
+:root[data-theme="dark"] .live-dot.reconnecting {
+  filter: brightness(1.3);
+}
+
+/* --- Install panel (ITER_04) --- */
+.install-panel {
+  display: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-top: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.install-panel.is-open {
+  display: block;
+}
+
+.install-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.install-panel-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.install-panel-close {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0 4px;
+}
+
+.marketplace-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.marketplace-select-label {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.marketplace-select {
+  font-size: 0.8rem;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  flex: 1;
+  min-width: 0;
+}
+
+/* --- Marketplace plugin rows --- */
+.mp-plugin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mp-plugin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: start;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.mp-plugin-row + .mp-plugin-row {
+  margin-top: 4px;
+}
+
+.mp-plugin-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.mp-plugin-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.install-status {
+  font-size: 0.68rem;
+  color: #3a8a3a;
+  font-weight: 600;
+}
+
+:root[data-theme="dark"] .install-status,
+:root[data-context="vscode"] .install-status {
+  color: #6bcb6b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .install-status {
+    color: #6bcb6b;
+  }
+}
+
+.mp-plugin-description {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  margin-top: 2px;
+  grid-column: 1;
+}
+
+.mp-keyword-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  grid-column: 1;
+}
+
+.mp-keyword {
+  font-size: 0.65rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: var(--fg-muted);
+}
+
+.mp-install-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  grid-column: 2;
+  grid-row: 1 / 4;
+}
+
+.mp-install-btn {
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+}
+
+.mp-install-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.mp-install-btn:disabled {
+  border-color: var(--border);
+  color: var(--fg-muted);
+  cursor: default;
+}
+
+.mp-install-error {
+  display: none;
+  font-size: 0.72rem;
+  color: #cc4444;
+  margin-top: 4px;
+  grid-column: 1 / 3;
+}
+
+.mp-install-error.visible {
+  display: block;
+}
+
+/* --- BulkActions install button --- */
+.bulk-install-btn {
+  font-size: 0.78rem;
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.bulk-install-btn:hover {
+  background: var(--accent);
+  color: #ffffff;
 }

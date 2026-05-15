@@ -26,6 +26,9 @@
       ]
     }
   },
+  "scripts": {
+    "prepackage": "make sync-css || powershell -ExecutionPolicy Bypass -File ../scripts/sync-css.ps1"
+  },
   "devDependencies": {
     "@types/vscode": "^1.80.0"
   }

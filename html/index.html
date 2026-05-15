@@ -9,7 +9,7 @@
 <body>
   <header>
     <div class="header-top">
-      <h1>Skills Toggle</h1>
+      <h1>Skills Toggle <span id="live-indicator" class="live-dot" title="Live updates active"></span></h1>
       <button class="btn-danger" id="btn-kill-server">Stop server</button>
       <div class="theme-toggle">
         <button class="theme-btn" data-theme="light">Light</button>
@@ -55,9 +55,14 @@
   </div>
 
   <div class="bulk-actions" id="bulk-actions" style="display:none">
-    <button id="btn-enable-all">Enable all</button>
-    <button id="btn-disable-all">Disable all</button>
+    <div>
+      <button id="btn-enable-all">Enable all</button>
+      <button id="btn-disable-all">Disable all</button>
+    </div>
+    <button class="bulk-install-btn" id="btn-install-plugin" onclick="openInstallPanel()">+ Install plugin</button>
   </div>
+
+  <div class="install-panel" id="install-panel"></div>
 
   <script>
     // ---- theme ----
@@ -79,9 +84,12 @@
 
     // ---- state ----
     let state = { local: [], global: [] };
+    let marketplaces = [];
+    let installPanelOpen = false;
+    let selectedMarketplace = null;
 
     // ---- load ----
-    async function load() {
+    async function fetchPlugins() {
       showStatus("Loading plugins...");
       try {
         const res = await fetch("/api/plugins");
@@ -103,6 +111,18 @@
         renderPlugins();
       } catch (err) {
         showError(`Failed to load plugins: ${err.message}`);
+      }
+    }
+
+    // ---- fetch marketplace data ----
+    async function fetchMarketplace() {
+      try {
+        const res = await fetch("/api/marketplace");
+        const data = await res.json();
+        marketplaces = data.marketplaces || [];
+        if (installPanelOpen) renderInstallPanel();
+      } catch (_) {
+        // Marketplace data is best-effort; don't surface errors here
       }
     }
 
@@ -180,6 +200,9 @@
     }
 
     function localRowHtml(p) {
+      const control = p.installed === false
+        ? `<button class="mp-install-btn" onclick="installLocalPlugin('${esc(p.id)}', this)">Install</button>`
+        : `<input type="checkbox" class="toggle" data-id="${esc(p.id)}" ${p.enabled ? "checked" : ""} />`;
       return `
         <div class="plugin-row" data-id="${esc(p.id)}">
           <div class="plugin-info">
@@ -190,8 +213,7 @@
             ${renderAgentsDisclosure(p.agents)}
           </div>
           <div class="toggle-wrap">
-            <input type="checkbox" class="toggle" data-id="${esc(p.id)}"
-              ${p.enabled ? "checked" : ""} />
+            ${control}
           </div>
         </div>`;
     }
@@ -231,11 +253,36 @@
       }
     }
 
+    // ---- install local orphan ----
+    async function installLocalPlugin(id, btnEl) {
+      if (btnEl) {
+        btnEl.textContent = "Installing…";
+        btnEl.disabled = true;
+      }
+      try {
+        const res = await fetch("/api/install", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Unknown error");
+        await fetchPlugins();
+      } catch (err) {
+        if (btnEl) {
+          btnEl.innerHTML = "Install";
+          btnEl.disabled = false;
+        }
+        showError(`Install failed: ${err.message}`);
+      }
+    }
+
     // ---- bulk ----
     async function bulkToggle(enabled) {
       const buttons = document.querySelectorAll(".bulk-actions button");
       buttons.forEach((b) => (b.disabled = true));
       for (const p of state.local) {
+        if (p.installed === false) continue;
         if (p.enabled !== enabled) {
           const el = document.querySelector(`.toggle[data-id="${esc(p.id)}"]`);
           if (el) await toggle(p.id, enabled, el);
@@ -273,7 +320,8 @@
         if (data.ok) {
           document.getElementById("project-picker-expand").classList.remove("is-open");
           document.getElementById("project-change-btn").innerHTML = "Change &#9660;";
-          await load();
+          await fetchPlugins();
+          await fetchMarketplace();
         } else {
           errEl.textContent = data.error || "Unknown error";
           errEl.classList.add("visible");
@@ -286,6 +334,148 @@
         applyBtn.disabled = false;
       }
     });
+
+    // ---- install panel ----
+    function openInstallPanel() {
+      installPanelOpen = true;
+      if (!selectedMarketplace && marketplaces.length > 0) {
+        selectedMarketplace = marketplaces[0].key;
+      }
+      renderInstallPanel();
+      document.getElementById("install-panel").classList.add("is-open");
+    }
+
+    function closeInstallPanel() {
+      installPanelOpen = false;
+      document.getElementById("install-panel").classList.remove("is-open");
+    }
+
+    function renderInstallPanel() {
+      const panel = document.getElementById("install-panel");
+
+      if (marketplaces.length === 0) {
+        panel.innerHTML = `
+          <div class="install-panel-header">
+            <span class="install-panel-title">Install plugin</span>
+            <button class="install-panel-close" onclick="closeInstallPanel()">&#10005; Close</button>
+          </div>
+          <div class="status">No marketplaces configured. Add marketplaces via Claude Code before installing plugins.</div>`;
+        return;
+      }
+
+      const options = marketplaces
+        .map((m) => `<option value="${esc(m.key)}" ${m.key === selectedMarketplace ? "selected" : ""}>${esc(m.key)}</option>`)
+        .join("");
+
+      const mp = marketplaces.find((m) => m.key === selectedMarketplace);
+      let pluginListHtml = "";
+      if (mp) {
+        if (mp.error) {
+          pluginListHtml = `<div class="mp-install-error visible">${esc(mp.error)}</div>`;
+        } else if (mp.plugins.length === 0) {
+          pluginListHtml = `<div class="status">No plugins found in this marketplace.</div>`;
+        } else {
+          pluginListHtml = mp.plugins.map(renderMpPluginRow).join("");
+        }
+      }
+
+      panel.innerHTML = `
+        <div class="install-panel-header">
+          <span class="install-panel-title">Install plugin</span>
+          <button class="install-panel-close" onclick="closeInstallPanel()">&#10005; Close</button>
+        </div>
+        <div class="marketplace-select-row">
+          <span class="marketplace-select-label">Marketplace</span>
+          <select class="marketplace-select" onchange="selectedMarketplace = this.value; renderInstallPanel()">
+            ${options}
+          </select>
+        </div>
+        <div class="mp-plugin-list">${pluginListHtml}</div>`;
+    }
+
+    function renderMpPluginRow(p) {
+      const scopeLabel = p.installed
+        ? `<span class="install-status">&#10003; ${esc(p.installedScope)}</span>`
+        : "";
+
+      const keywords = (p.keywords || [])
+        .map((k) => `<span class="mp-keyword">${esc(k)}</span>`)
+        .join("");
+
+      const btnLabel   = p.installed ? "Installed" : "Install &#8595;";
+      const btnDisabled = p.installed ? "disabled" : "";
+      const btnOnclick  = p.installed ? "" : `onclick="installPlugin('${esc(p.id)}')"`;
+
+      return `
+        <div class="mp-plugin-row" id="mp-row-${CSS.escape(p.id)}">
+          <div class="mp-plugin-main">
+            <span class="mp-plugin-name">${esc(p.name)}</span>
+            ${p.version ? `<span class="version-badge">v${esc(p.version)}</span>` : ""}
+            ${scopeLabel}
+          </div>
+          <div class="mp-install-col">
+            <button class="mp-install-btn" id="mp-btn-${CSS.escape(p.id)}" ${btnDisabled} ${btnOnclick}>
+              ${btnLabel}
+            </button>
+          </div>
+          ${p.description ? `<div class="mp-plugin-description">${esc(p.description)}</div>` : ""}
+          ${keywords ? `<div class="mp-keyword-list">${keywords}</div>` : ""}
+          <div class="mp-install-error" id="mp-err-${CSS.escape(p.id)}"></div>
+        </div>`;
+    }
+
+    // ---- install action ----
+    async function installPlugin(id) {
+      const btn = document.getElementById(`mp-btn-${CSS.escape(id)}`);
+      const errEl = document.getElementById(`mp-err-${CSS.escape(id)}`);
+
+      btn.textContent = "Installing…";
+      btn.disabled = true;
+      errEl.textContent = "";
+      errEl.classList.remove("visible");
+
+      try {
+        const res = await fetch("/api/install", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Unknown error");
+
+        await Promise.all([fetchPlugins(), fetchMarketplace()]);
+      } catch (err) {
+        btn.innerHTML = "Install &#8595;";
+        btn.disabled = false;
+        errEl.textContent = `Install failed: ${err.message}`;
+        errEl.classList.add("visible");
+      }
+    }
+
+    // ---- SSE event stream (ITER_06) ----
+    function setLiveIndicator(state) {
+      const el = document.getElementById("live-indicator");
+      el.className = "live-dot" + (state !== "off" ? ` ${state}` : "");
+    }
+
+    function connectEventStream() {
+      const es = new EventSource("/api/events");
+
+      es.onopen = () => setLiveIndicator("connected");
+
+      es.onmessage = (event) => {
+        if (event.data === "refresh") {
+          fetchPlugins();
+          if (installPanelOpen) fetchMarketplace();
+        }
+      };
+
+      es.onerror = () => {
+        setLiveIndicator("reconnecting");
+        es.close();
+        setTimeout(connectEventStream, 3000);
+      };
+    }
 
     // ---- helpers ----
     function showStatus(html) {
@@ -326,7 +516,9 @@
         '<p style="padding:1.25rem;font-family:sans-serif;color:#e05c5c">Server stopped.</p>';
     });
 
-    load();
+    fetchPlugins();
+    fetchMarketplace();
+    connectEventStream();
   </script>
 </body>
 </html>
