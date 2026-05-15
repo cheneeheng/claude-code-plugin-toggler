@@ -75,3 +75,60 @@
 **Impact / Risk:** Low — internal function rename within the same files. No external callers.
 
 **Outcome:** Both HTML files use `toggleDisclosure`; skills and agents show correct labels.
+
+---
+
+### Entry 005
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-05-15T00:00:00Z
+**Task:** ITER_04/05/06 — Rename `load()` to `fetchPlugins()` in index.html
+
+**Context:** The ITER_04 plan references `fetchPlugins()` in `installPlugin()` and `connectEventStream()` but the existing codebase had a single `load()` function. The plan did not include a rename directive.
+
+**Decision / Action:** Renamed `load()` to `fetchPlugins()` directly in index.html and updated all call sites. Did not create a wrapper alias — the rename is clean and there are no external callers.
+
+**Rationale:** `fetchPlugins` is the name used throughout the new plan code. Keeping `load()` and adding an alias would leave dead names in the file with no benefit.
+
+**Impact / Risk:** Low — purely internal to index.html.
+
+**Outcome:** `load()` → `fetchPlugins()` in index.html; `load()` still works in index.html because project-apply handler previously called `load()` — updated to `fetchPlugins()` + `fetchMarketplace()`.
+
+---
+
+### Entry 006
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-05-15T00:00:00Z
+**Task:** ITER_05 — Sync VSCode styles.css diverged from canonical HTML styles.css
+
+**Context:** Before ITER_05, `vscode-extension/webview/styles.css` had accumulated classes (`.project-picker`, `.mock-banner`) not present in `html/styles.css`, and was missing classes added in ITER_03 (`html/styles.css` is the more up-to-date file). ITER_05 designates `html/styles.css` as the canonical source.
+
+**Decision / Action:** Replaced `vscode-extension/webview/styles.css` with the full content of `html/styles.css` (which now includes all ITER_04+05+06 additions). The old VSCode-only classes were dead code — no `panel.html` elements referenced them.
+
+**Rationale:** ITER_05 explicitly states the VSCode file "becomes a generated file — never edit it directly." Preserving the dead VSCode-only classes would contradict this and add noise.
+
+**Impact / Risk:** Low — verified no `panel.html` elements use `.project-picker` or `.mock-banner`.
+
+**Outcome:** `vscode-extension/webview/styles.css` is now identical to `html/styles.css`.
+
+---
+
+### Entry 007
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-05-15T00:00:00Z
+**Task:** ITER_04 — `installPlugin()` in panel.html does not wait for a result message
+
+**Context:** The plan says the VSCode webview posts `{ type: 'install' }` and then waits for the next `{ type: 'load' }` message to re-render. The button stays in "Installing…" state until that arrives. This is correct per spec. However, the plan also notes "No separate `{ type: 'installResult' }` message."
+
+**Decision / Action:** `installPlugin()` in panel.html sets the button to "Installing…" and posts to the extension, then returns. The button stays in that state until the extension calls `_refresh()` which posts `{ type: 'load' }` — which triggers a full re-render and resets the button state.
+
+**Rationale:** Exactly per spec. The full-refresh approach keeps webview stateless with respect to install outcomes.
+
+**Impact / Risk:** None — matches the specified behaviour exactly.
+
+**Outcome:** Implemented as described.

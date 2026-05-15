@@ -44,13 +44,21 @@
   </div>
 
   <div class="bulk-actions" id="bulk-actions" style="display:none">
-    <button id="btn-enable-all">Enable all</button>
-    <button id="btn-disable-all">Disable all</button>
+    <div>
+      <button id="btn-enable-all">Enable all</button>
+      <button id="btn-disable-all">Disable all</button>
+    </div>
+    <button class="bulk-install-btn" id="btn-install-plugin" onclick="openInstallPanel()">+ Install plugin</button>
   </div>
 
+  <div class="install-panel" id="install-panel"></div>
+
   <script>
-    const vscode = acquireVsCodeApi();
+    const vscodeApi = acquireVsCodeApi();
     let state = { local: [], global: [] };
+    let marketplaces = [];
+    let installPanelOpen = false;
+    let selectedMarketplace = null;
 
     window.addEventListener("message", (event) => {
       const msg = event.data;
@@ -65,7 +73,13 @@
         document.getElementById("error").style.display = "none";
         state.local = (msg.plugins && msg.plugins.local) || [];
         state.global = (msg.plugins && msg.plugins.global) || [];
+        marketplaces = msg.marketplaces || [];
+        // Restore selected marketplace if still valid
+        if (selectedMarketplace && !marketplaces.find((m) => m.key === selectedMarketplace)) {
+          selectedMarketplace = null;
+        }
         renderPlugins();
+        if (installPanelOpen) renderInstallPanel();
       } else if (msg.type === "error") {
         showError(msg.message);
       }
@@ -102,7 +116,7 @@
           const enabled = e.target.checked;
           const p = state.local.find((x) => x.id === id);
           if (p) p.enabled = enabled;
-          vscode.postMessage({ type: "toggle", id, enabled });
+          vscodeApi.postMessage({ type: "toggle", id, enabled });
         });
       });
     }
@@ -177,11 +191,112 @@
         </div>`;
     }
 
+    // ---- install panel ----
+    function openInstallPanel() {
+      installPanelOpen = true;
+      if (!selectedMarketplace && marketplaces.length > 0) {
+        selectedMarketplace = marketplaces[0].key;
+      }
+      renderInstallPanel();
+      document.getElementById("install-panel").classList.add("is-open");
+    }
+
+    function closeInstallPanel() {
+      installPanelOpen = false;
+      document.getElementById("install-panel").classList.remove("is-open");
+    }
+
+    function renderInstallPanel() {
+      const panel = document.getElementById("install-panel");
+
+      if (marketplaces.length === 0) {
+        panel.innerHTML = `
+          <div class="install-panel-header">
+            <span class="install-panel-title">Install plugin</span>
+            <button class="install-panel-close" onclick="closeInstallPanel()">&#10005; Close</button>
+          </div>
+          <div class="status">No marketplaces configured. Add marketplaces via Claude Code before installing plugins.</div>`;
+        return;
+      }
+
+      const options = marketplaces
+        .map((m) => `<option value="${esc(m.key)}" ${m.key === selectedMarketplace ? "selected" : ""}>${esc(m.key)}</option>`)
+        .join("");
+
+      const mp = marketplaces.find((m) => m.key === selectedMarketplace);
+      let pluginListHtml = "";
+      if (mp) {
+        if (mp.error) {
+          pluginListHtml = `<div class="mp-install-error visible">${esc(mp.error)}</div>`;
+        } else if (mp.plugins.length === 0) {
+          pluginListHtml = `<div class="status">No plugins found in this marketplace.</div>`;
+        } else {
+          pluginListHtml = mp.plugins.map(renderMpPluginRow).join("");
+        }
+      }
+
+      panel.innerHTML = `
+        <div class="install-panel-header">
+          <span class="install-panel-title">Install plugin</span>
+          <button class="install-panel-close" onclick="closeInstallPanel()">&#10005; Close</button>
+        </div>
+        <div class="marketplace-select-row">
+          <span class="marketplace-select-label">Marketplace</span>
+          <select class="marketplace-select" onchange="selectedMarketplace = this.value; renderInstallPanel()">
+            ${options}
+          </select>
+        </div>
+        <div class="mp-plugin-list">${pluginListHtml}</div>`;
+    }
+
+    function renderMpPluginRow(p) {
+      const scopeLabel = p.installed
+        ? `<span class="install-status">&#10003; ${esc(p.installedScope)}</span>`
+        : "";
+
+      const keywords = (p.keywords || [])
+        .map((k) => `<span class="mp-keyword">${esc(k)}</span>`)
+        .join("");
+
+      const btnLabel    = p.installed ? "Installed" : "Install &#8595;";
+      const btnDisabled = p.installed ? "disabled" : "";
+      const btnOnclick  = p.installed ? "" : `onclick="installPlugin('${esc(p.id)}')"`;
+
+      return `
+        <div class="mp-plugin-row" id="mp-row-${CSS.escape(p.id)}">
+          <div class="mp-plugin-main">
+            <span class="mp-plugin-name">${esc(p.name)}</span>
+            ${p.version ? `<span class="version-badge">v${esc(p.version)}</span>` : ""}
+            ${scopeLabel}
+          </div>
+          <div class="mp-install-col">
+            <button class="mp-install-btn" id="mp-btn-${CSS.escape(p.id)}" ${btnDisabled} ${btnOnclick}>
+              ${btnLabel}
+            </button>
+          </div>
+          ${p.description ? `<div class="mp-plugin-description">${esc(p.description)}</div>` : ""}
+          ${keywords ? `<div class="mp-keyword-list">${keywords}</div>` : ""}
+          <div class="mp-install-error" id="mp-err-${CSS.escape(p.id)}"></div>
+        </div>`;
+    }
+
+    // ---- install action (VSCode) ----
+    async function installPlugin(id) {
+      const btn = document.getElementById(`mp-btn-${CSS.escape(id)}`);
+      if (btn) {
+        btn.textContent = "Installing…";
+        btn.disabled = true;
+      }
+      // Post to extension; full re-render comes via the next { type: 'load' } message
+      vscodeApi.postMessage({ type: "install", id });
+    }
+
+    // ---- bulk ----
     function bulkToggle(enabled) {
       for (const p of state.local) {
         if (p.enabled !== enabled) {
           p.enabled = enabled;
-          vscode.postMessage({ type: "toggle", id: p.id, enabled });
+          vscodeApi.postMessage({ type: "toggle", id: p.id, enabled });
         }
       }
       renderPlugins();
