@@ -2,10 +2,7 @@ const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execFile } = require("child_process");
-const { promisify } = require("util");
-
-const execFileAsync = promisify(execFile);
+const { spawn } = require("child_process");
 
 function _mockPlugins() {
   return {
@@ -242,12 +239,74 @@ function loadMarketplacePlugins(marketplaceKey, installLocation) {
   }
 }
 
-async function runInstall(pluginId, projectRoot) {
-  await execFileAsync(
-    "claude",
-    ["plugin", "install", pluginId, "--scope", "local"],
-    { cwd: projectRoot, timeout: 60_000 }
-  );
+function streamInstall(pluginId, projectRoot, onLine) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("claude", ["plugin", "install", pluginId, "--scope", "local"], {
+      cwd: projectRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdoutBuf = "";
+    proc.stdout.on("data", (chunk) => {
+      stdoutBuf += chunk.toString("utf8");
+      const lines = stdoutBuf.split("\n");
+      stdoutBuf = lines.pop();
+      lines.forEach((l) => onLine(l + "\n"));
+    });
+
+    let stderrBuf = "";
+    proc.stderr.on("data", (chunk) => {
+      stderrBuf += chunk.toString("utf8");
+      const lines = stderrBuf.split("\n");
+      stderrBuf = lines.pop();
+      lines.forEach((l) => onLine(l + "\n"));
+    });
+
+    proc.on("close", (code) => {
+      if (stdoutBuf) onLine(stdoutBuf);
+      if (stderrBuf) onLine(stderrBuf);
+      if (code === 0) resolve();
+      else reject(new Error(`Exit code ${code}`));
+    });
+
+    proc.on("error", (err) => {
+      reject(err);
+    });
+  });
+}
+
+function streamMarketplaceRefresh(projectRoot, onLine) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("claude", ["plugin", "marketplace", "update"], {
+      cwd: projectRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdoutBuf = "", stderrBuf = "";
+
+    proc.stdout.on("data", (chunk) => {
+      stdoutBuf += chunk.toString("utf8");
+      const lines = stdoutBuf.split("\n");
+      stdoutBuf = lines.pop();
+      lines.forEach((l) => onLine(l + "\n"));
+    });
+
+    proc.stderr.on("data", (chunk) => {
+      stderrBuf += chunk.toString("utf8");
+      const lines = stderrBuf.split("\n");
+      stderrBuf = lines.pop();
+      lines.forEach((l) => onLine(l + "\n"));
+    });
+
+    proc.on("close", (code) => {
+      if (stdoutBuf) onLine(stdoutBuf);
+      if (stderrBuf) onLine(stderrBuf);
+      if (code === 0) resolve();
+      else reject(new Error(`Exit code ${code}`));
+    });
+
+    proc.on("error", reject);
+  });
 }
 
 class SkillsViewProvider {
@@ -416,6 +475,20 @@ class SkillsViewProvider {
       settings.enabledPlugins[id] = enabled;
       saveSettingsLocal(projectRoot, settings);
       this._refresh(webview);
+    } else if (msg.type === "marketplaceRefresh") {
+      const projectRoot = this._projectRoot();
+      if (!projectRoot) return;
+
+      webview.postMessage({ type: "marketplaceRefreshStart" });
+      try {
+        await streamMarketplaceRefresh(projectRoot, (line) => {
+          webview.postMessage({ type: "marketplaceRefreshLine", text: line });
+        });
+        this._refresh(webview);
+      } catch (err) {
+        webview.postMessage({ type: "marketplaceRefreshDone", ok: false, error: err.message });
+        this._refresh(webview);
+      }
     } else if (msg.type === "install") {
       const { id } = msg;
       const projectRoot = this._projectRoot();
@@ -431,11 +504,15 @@ class SkillsViewProvider {
         return;
       }
 
+      webview.postMessage({ type: "installStart", id });
+
       try {
-        await runInstall(id, projectRoot);
+        await streamInstall(id, projectRoot, (line) => {
+          webview.postMessage({ type: "installLine", id, text: line });
+        });
         this._refresh(webview);
       } catch (err) {
-        vscode.window.showErrorMessage(`Install failed: ${err.message}`);
+        webview.postMessage({ type: "installDone", id, ok: false, error: err.message });
         this._refresh(webview);
       }
     }
