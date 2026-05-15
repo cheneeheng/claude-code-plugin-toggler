@@ -132,3 +132,41 @@
 **Impact / Risk:** None — matches the specified behaviour exactly.
 
 **Outcome:** Implemented as described.
+
+---
+
+### Entry 008
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-05-15T00:00:00Z
+**Task:** ITER_07 — `installLocalPlugin()` calls `/api/install` which is removed
+
+**Context:** ITER_07 removes `POST /api/install` entirely and replaces it with `POST /api/install-stream`. The `installLocalPlugin()` function in `index.html` (used for orphan plugins in the local list) still called `/api/install`. The plan does not mention updating this function.
+
+**Decision / Action:** Updated `installLocalPlugin()` to call `/api/install-stream` using the same `ReadableStream` SSE parsing pattern. Line events are consumed silently (no per-row log area on local plugin rows). Only the `done` event is checked for errors. No log area is shown — the button state and top-level `showError()` are used instead.
+
+**Rationale:** The old endpoint is gone; keeping `installLocalPlugin()` calling it would cause a 404 at runtime. The minimal fix is to use the new endpoint with graceful stream consumption. Adding a log area to local plugin rows would exceed ITER_07 scope.
+
+**Impact / Risk:** Low — same user-visible behaviour as before (button spins, error shown on failure, list refreshes on success). Only internal call site changes.
+
+**Outcome:** `installLocalPlugin()` updated in `index.html`.
+
+---
+
+### Entry 009
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-05-15T00:00:00Z
+**Task:** ITER_08 — `package.json` `repository.url` placeholder
+
+**Context:** The ITER_08 spec shows `"url": "https://github.com/<your-org>/skills-toggle"`. The actual repo URL is not specified in the plan.
+
+**Decision / Action:** Used `https://github.com/cheneeheng/skills-toggle` based on the git user name `EeHeng Chen` (handle `cheneeheng`) visible in git config. The `publisher` field is set to `ceh-plugins` as specified.
+
+**Rationale:** The plan uses `<your-org>` as a placeholder; `cheneeheng` is the most reasonable inference from the repo context. This is not load-bearing for local `.vsix` installs — `vsce package` only validates the field is non-empty.
+
+**Impact / Risk:** Low — only affects `.vsix` metadata, not functionality. Can be corrected before any Marketplace publish.
+
+**Outcome:** `repository.url` set to `https://github.com/cheneeheng/skills-toggle`.

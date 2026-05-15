@@ -546,7 +546,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.server._watch_mtimes = {}
             self._send_json({"ok": True, "project_root": path_str})
 
-        elif self.path == "/api/install":
+        elif self.path == "/api/install-stream":
             body = self._read_body()
             plugin_id = body.get("id", "")
 
@@ -555,40 +555,89 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
 
             marketplace_key = plugin_id.split("@", 1)[1]
-
             known = load_known_marketplaces()
-            known_keys = {m["key"] for m in known}
-            if marketplace_key not in known_keys:
+            if marketplace_key not in {m["key"] for m in known}:
                 self._send_json(
                     {"ok": False, "error": f"Unknown marketplace: {marketplace_key}"}, 400
                 )
                 return
 
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+
+            def send_event(payload: dict):
+                line = json.dumps(payload, ensure_ascii=False)
+                self.wfile.write(f"data: {line}\n\n".encode("utf-8"))
+                self.wfile.flush()
+
             try:
-                result = subprocess.run(
+                proc = subprocess.Popen(
                     ["claude", "plugin", "install", plugin_id, "--scope", "local"],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
                     cwd=self.server.project_root,
                 )
             except FileNotFoundError:
-                self._send_json({"ok": False, "error": "'claude' CLI not found on PATH"}, 500)
-                return
-            except subprocess.TimeoutExpired:
-                self._send_json(
-                    {"ok": False, "error": "Install timed out after 60 seconds"}, 500
-                )
+                send_event({"type": "done", "ok": False, "error": "'claude' CLI not found on PATH"})
                 return
 
-            if result.returncode != 0:
-                stderr = result.stderr.strip() or result.stdout.strip()
-                self._send_json(
-                    {"ok": False, "error": f"claude plugin install exited with code {result.returncode}: {stderr}"}, 500
-                )
+            try:
+                for raw_line in iter(proc.stdout.readline, b""):
+                    text = raw_line.decode("utf-8", errors="replace")
+                    send_event({"type": "line", "text": text})
+            except (BrokenPipeError, ConnectionResetError):
+                proc.kill()
+                proc.wait()
                 return
 
-            self._send_json({"ok": True, "id": plugin_id})
+            proc.wait()
+
+            if proc.returncode == 0:
+                send_event({"type": "done", "ok": True})
+            else:
+                send_event({"type": "done", "ok": False, "error": f"Exit code {proc.returncode}"})
+
+        elif self.path == "/api/marketplace-refresh":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+
+            def send_event(payload: dict):
+                line = json.dumps(payload, ensure_ascii=False)
+                self.wfile.write(f"data: {line}\n\n".encode("utf-8"))
+                self.wfile.flush()
+
+            try:
+                proc = subprocess.Popen(
+                    ["claude", "plugin", "marketplace", "update"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    cwd=self.server.project_root,
+                )
+            except FileNotFoundError:
+                send_event({"type": "done", "ok": False, "error": "'claude' CLI not found on PATH"})
+                return
+
+            try:
+                for raw_line in iter(proc.stdout.readline, b""):
+                    text = raw_line.decode("utf-8", errors="replace")
+                    send_event({"type": "line", "text": text})
+            except (BrokenPipeError, ConnectionResetError):
+                proc.kill()
+                proc.wait()
+                return
+
+            proc.wait()
+
+            if proc.returncode == 0:
+                send_event({"type": "done", "ok": True})
+            else:
+                send_event({"type": "done", "ok": False, "error": f"Exit code {proc.returncode}"})
 
         elif self.path == "/api/shutdown":
             self._send_json({"ok": True})

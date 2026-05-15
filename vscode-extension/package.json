@@ -1,9 +1,18 @@
 {
-  "name": "claude-code-plugin-toggler",
-  "displayName": "Claude Code Plugin Toggler",
+  "name": "skills-toggle",
+  "displayName": "Skills Toggle",
+  "description": "Manage Claude Code skill plugins per project from a VSCode sidebar.",
   "version": "0.3.0",
-  "description": "Manage Claude Code skill plugins across projects.",
+  "publisher": "ceh-plugins",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cheneeheng/skills-toggle"
+  },
+  "license": "MIT",
+  "icon": "icon.png",
   "engines": { "vscode": "^1.80.0" },
+  "categories": ["Other"],
+  "keywords": ["claude", "plugins", "skills", "claude code"],
   "activationEvents": [],
   "main": "./extension.js",
   "contributes": {
@@ -27,9 +36,13 @@
     }
   },
   "scripts": {
-    "prepackage": "make sync-css || powershell -ExecutionPolicy Bypass -File ../scripts/sync-css.ps1"
+    "sync-css":    "make sync-css || powershell -ExecutionPolicy Bypass -File ../scripts/sync-css.ps1",
+    "prepackage":  "npm run sync-css",
+    "package":     "vsce package --out dist/skills-toggle.vsix",
+    "install-ext": "code --install-extension dist/skills-toggle.vsix"
   },
   "devDependencies": {
-    "@types/vscode": "^1.80.0"
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.0.0"
   }
 }

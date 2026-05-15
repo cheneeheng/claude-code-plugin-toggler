@@ -82,6 +82,46 @@
         if (installPanelOpen) renderInstallPanel();
       } else if (msg.type === "error") {
         showError(msg.message);
+      } else if (msg.type === "marketplaceRefreshStart") {
+        const btn   = document.getElementById("marketplace-refresh-btn");
+        const logEl = document.getElementById("marketplace-refresh-log");
+        if (btn)   { btn.disabled = true; btn.textContent = "↻ Refreshing…"; }
+        if (logEl) { logEl.textContent = ""; logEl.classList.add("is-open"); }
+      } else if (msg.type === "marketplaceRefreshLine") {
+        const logEl = document.getElementById("marketplace-refresh-log");
+        if (logEl) { logEl.textContent += event.data.text; logEl.scrollTop = logEl.scrollHeight; }
+      } else if (msg.type === "marketplaceRefreshDone") {
+        const btn   = document.getElementById("marketplace-refresh-btn");
+        const logEl = document.getElementById("marketplace-refresh-log");
+        if (btn)   { btn.disabled = false; btn.textContent = "↻ Refresh"; }
+        if (!event.data.ok && logEl) {
+          logEl.textContent += `\nError: ${event.data.error}`;
+        } else if (logEl) {
+          logEl.classList.remove("is-open");
+        }
+      } else if (msg.type === "installStart") {
+        const { id } = event.data;
+        const btn   = document.getElementById(`mp-btn-${CSS.escape(id)}`);
+        const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
+        if (btn)   { btn.textContent = "Installing…"; btn.disabled = true; }
+        if (logEl) { logEl.textContent = ""; logEl.classList.add("is-open"); }
+      } else if (msg.type === "installLine") {
+        const { id, text } = event.data;
+        const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
+        if (logEl) {
+          logEl.textContent += text;
+          logEl.scrollTop = logEl.scrollHeight;
+        }
+      } else if (msg.type === "installDone") {
+        const { id, ok, error } = event.data;
+        if (!ok) {
+          const btn   = document.getElementById(`mp-btn-${CSS.escape(id)}`);
+          const errEl = document.getElementById(`mp-err-${CSS.escape(id)}`);
+          const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
+          if (btn)   { btn.textContent = "Install ↓"; btn.disabled = false; }
+          if (logEl) logEl.classList.remove("is-open");
+          if (errEl) { errEl.textContent = `Install failed: ${error}`; errEl.classList.add("visible"); }
+        }
       }
     });
 
@@ -208,6 +248,10 @@
       document.getElementById("install-panel").classList.remove("is-open");
     }
 
+    function triggerMarketplaceRefresh() {
+      vscodeApi.postMessage({ type: "marketplaceRefresh" });
+    }
+
     function renderInstallPanel() {
       const panel = document.getElementById("install-panel");
 
@@ -215,8 +259,13 @@
         panel.innerHTML = `
           <div class="install-panel-header">
             <span class="install-panel-title">Install plugin</span>
-            <button class="install-panel-close" onclick="closeInstallPanel()">&#10005; Close</button>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="marketplace-refresh-btn" id="marketplace-refresh-btn"
+                      onclick="triggerMarketplaceRefresh()">&#8635; Refresh</button>
+              <button class="install-panel-close" onclick="closeInstallPanel()">&#10005; Close</button>
+            </div>
           </div>
+          <div class="mp-install-log" id="marketplace-refresh-log"></div>
           <div class="status">No marketplaces configured. Add marketplaces via Claude Code before installing plugins.</div>`;
         return;
       }
@@ -240,8 +289,13 @@
       panel.innerHTML = `
         <div class="install-panel-header">
           <span class="install-panel-title">Install plugin</span>
-          <button class="install-panel-close" onclick="closeInstallPanel()">&#10005; Close</button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="marketplace-refresh-btn" id="marketplace-refresh-btn"
+                    onclick="triggerMarketplaceRefresh()">&#8635; Refresh</button>
+            <button class="install-panel-close" onclick="closeInstallPanel()">&#10005; Close</button>
+          </div>
         </div>
+        <div class="mp-install-log" id="marketplace-refresh-log"></div>
         <div class="marketplace-select-row">
           <span class="marketplace-select-label">Marketplace</span>
           <select class="marketplace-select" onchange="selectedMarketplace = this.value; renderInstallPanel()">
@@ -279,6 +333,7 @@
           ${p.description ? `<div class="mp-plugin-description">${esc(p.description)}</div>` : ""}
           ${keywords ? `<div class="mp-keyword-list">${keywords}</div>` : ""}
           <div class="mp-install-error" id="mp-err-${CSS.escape(p.id)}"></div>
+          <div class="mp-install-log" id="mp-log-${CSS.escape(p.id)}"></div>
         </div>`;
     }
 

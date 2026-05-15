@@ -260,13 +260,37 @@
         btnEl.disabled = true;
       }
       try {
-        const res = await fetch("/api/install", {
+        const res = await fetch("/api/install-stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id }),
         });
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || "Unknown error");
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        const reader  = res.body.getReader();
+        const decoder = new TextDecoder();
+        let   buffer  = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop();
+          for (const part of parts) {
+            const dataLine = part.split("\n").find((l) => l.startsWith("data: "));
+            if (!dataLine) continue;
+            const payload = JSON.parse(dataLine.slice(6));
+            if (payload.type === "done" && !payload.ok) {
+              throw new Error(payload.error || "Install failed");
+            }
+          }
+        }
+
         await fetchPlugins();
       } catch (err) {
         if (btnEl) {
@@ -350,6 +374,67 @@
       document.getElementById("install-panel").classList.remove("is-open");
     }
 
+    async function triggerMarketplaceRefresh() {
+      const btn   = document.getElementById("marketplace-refresh-btn");
+      const logEl = document.getElementById("marketplace-refresh-log");
+      if (!btn || !logEl) return;
+
+      btn.disabled = true;
+      btn.textContent = "↻ Refreshing…";
+      logEl.textContent = "";
+      logEl.classList.add("is-open");
+
+      try {
+        const res = await fetch("/api/marketplace-refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        const reader  = res.body.getReader();
+        const decoder = new TextDecoder();
+        let   buffer  = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop();
+
+          for (const part of parts) {
+            const dataLine = part.split("\n").find((l) => l.startsWith("data: "));
+            if (!dataLine) continue;
+            const payload = JSON.parse(dataLine.slice(6));
+
+            if (payload.type === "line") {
+              logEl.textContent += payload.text;
+              logEl.scrollTop = logEl.scrollHeight;
+            } else if (payload.type === "done") {
+              if (!payload.ok) throw new Error(payload.error || "Refresh failed");
+            }
+          }
+        }
+
+        logEl.classList.remove("is-open");
+        await fetchMarketplace();
+
+      } catch (err) {
+        logEl.textContent += `\nError: ${err.message}`;
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "↻ Refresh";
+        }
+      }
+    }
+
     function renderInstallPanel() {
       const panel = document.getElementById("install-panel");
 
@@ -357,8 +442,13 @@
         panel.innerHTML = `
           <div class="install-panel-header">
             <span class="install-panel-title">Install plugin</span>
-            <button class="install-panel-close" onclick="closeInstallPanel()">&#10005; Close</button>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="marketplace-refresh-btn" id="marketplace-refresh-btn"
+                      onclick="triggerMarketplaceRefresh()">&#8635; Refresh</button>
+              <button class="install-panel-close" onclick="closeInstallPanel()">&#10005; Close</button>
+            </div>
           </div>
+          <div class="mp-install-log" id="marketplace-refresh-log"></div>
           <div class="status">No marketplaces configured. Add marketplaces via Claude Code before installing plugins.</div>`;
         return;
       }
@@ -382,8 +472,13 @@
       panel.innerHTML = `
         <div class="install-panel-header">
           <span class="install-panel-title">Install plugin</span>
-          <button class="install-panel-close" onclick="closeInstallPanel()">&#10005; Close</button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="marketplace-refresh-btn" id="marketplace-refresh-btn"
+                    onclick="triggerMarketplaceRefresh()">&#8635; Refresh</button>
+            <button class="install-panel-close" onclick="closeInstallPanel()">&#10005; Close</button>
+          </div>
         </div>
+        <div class="mp-install-log" id="marketplace-refresh-log"></div>
         <div class="marketplace-select-row">
           <span class="marketplace-select-label">Marketplace</span>
           <select class="marketplace-select" onchange="selectedMarketplace = this.value; renderInstallPanel()">
@@ -421,32 +516,75 @@
           ${p.description ? `<div class="mp-plugin-description">${esc(p.description)}</div>` : ""}
           ${keywords ? `<div class="mp-keyword-list">${keywords}</div>` : ""}
           <div class="mp-install-error" id="mp-err-${CSS.escape(p.id)}"></div>
+          <div class="mp-install-log" id="mp-log-${CSS.escape(p.id)}"></div>
         </div>`;
     }
 
     // ---- install action ----
     async function installPlugin(id) {
-      const btn = document.getElementById(`mp-btn-${CSS.escape(id)}`);
+      const btn   = document.getElementById(`mp-btn-${CSS.escape(id)}`);
       const errEl = document.getElementById(`mp-err-${CSS.escape(id)}`);
+      const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
 
       btn.textContent = "Installing…";
       btn.disabled = true;
       errEl.textContent = "";
       errEl.classList.remove("visible");
+      logEl.textContent = "";
+      logEl.classList.add("is-open");
 
       try {
-        const res = await fetch("/api/install", {
+        const res = await fetch("/api/install-stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id }),
         });
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || "Unknown error");
 
-        await Promise.all([fetchPlugins(), fetchMarketplace()]);
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        const reader  = res.body.getReader();
+        const decoder = new TextDecoder();
+        let   buffer  = "";
+        let   success = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop();
+
+          for (const part of parts) {
+            const dataLine = part.split("\n").find((l) => l.startsWith("data: "));
+            if (!dataLine) continue;
+            const payload = JSON.parse(dataLine.slice(6));
+
+            if (payload.type === "line") {
+              logEl.textContent += payload.text;
+              logEl.scrollTop = logEl.scrollHeight;
+            } else if (payload.type === "done") {
+              if (payload.ok) {
+                success = true;
+              } else {
+                throw new Error(payload.error || "Install failed");
+              }
+            }
+          }
+        }
+
+        if (success) {
+          logEl.classList.remove("is-open");
+          await Promise.all([fetchPlugins(), fetchMarketplace()]);
+        }
+
       } catch (err) {
         btn.innerHTML = "Install &#8595;";
         btn.disabled = false;
+        logEl.classList.remove("is-open");
         errEl.textContent = `Install failed: ${err.message}`;
         errEl.classList.add("visible");
       }
