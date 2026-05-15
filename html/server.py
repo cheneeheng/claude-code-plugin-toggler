@@ -584,7 +584,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             if result.returncode != 0:
                 stderr = result.stderr.strip() or result.stdout.strip()
                 self._send_json(
-                    {"ok": False, "error": f"Exit code {result.returncode}: {stderr}"}, 500
+                    {"ok": False, "error": f"claude plugin install exited with code {result.returncode}: {stderr}"}, 500
                 )
                 return
 
