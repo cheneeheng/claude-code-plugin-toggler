@@ -1,0 +1,21 @@
+{
+  "smoke-local@smoke-market": [
+    {
+      "scope": "local",
+      "projectPath": "__PROJECT_ROOT__",
+      "installPath": "",
+      "version": "1.0.0",
+      "installedAt": "2026-01-01T00:00:00.000Z",
+      "lastUpdated": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "smoke-global@smoke-market": [
+    {
+      "scope": "global",
+      "installPath": "",
+      "version": "2.0.0",
+      "installedAt": "2026-01-01T00:00:00.000Z",
+      "lastUpdated": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}
