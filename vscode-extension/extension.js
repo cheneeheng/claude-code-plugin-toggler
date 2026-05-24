@@ -70,12 +70,14 @@ function loadInstalledPlugins(projectRoot) {
           id: pluginId,
           version: localEntry.version || "",
           installPath: localEntry.installPath || "",
+          scope: localEntry.scope || "local",
         });
       } else if (globalEntry) {
         global_.push({
           id: pluginId,
           version: globalEntry.version || "",
           installPath: globalEntry.installPath || "",
+          scope: globalEntry.scope || "user",
         });
       }
     }
@@ -454,8 +456,9 @@ class SkillsViewProvider {
         });
       plugins.local = [...plugins.local, ...orphans];
 
-      const installedLocal = new Set((raw.local || []).map((e) => e.id));
-      const installedGlobal = new Set((raw.global || []).map((e) => e.id));
+      const installedScopeMap = new Map();
+      for (const e of (raw.local || [])) installedScopeMap.set(e.id, e.scope || "local");
+      for (const e of (raw.global || [])) installedScopeMap.set(e.id, e.scope || "user");
 
       const marketplacesMeta = loadKnownMarketplaces();
       const marketplaces = marketplacesMeta.map((m) => {
@@ -470,15 +473,9 @@ class SkillsViewProvider {
         } else {
           entry.plugins = mpPlugins.map((p) => {
             const pid = `${p.name}@${m.key}`;
-            let installed = false,
-              installedScope = null;
-            if (installedLocal.has(pid)) {
-              installed = true;
-              installedScope = "local";
-            } else if (installedGlobal.has(pid)) {
-              installed = true;
-              installedScope = "global";
-            }
+            const realScope = installedScopeMap.get(pid);
+            const installed = realScope !== undefined;
+            const installedScope = realScope ?? null;
             return { ...p, marketplace: m.key, id: pid, installed, installedScope };
           });
         }
