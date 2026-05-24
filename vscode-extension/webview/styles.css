@@ -727,6 +727,23 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   opacity: 0.5;
 }
 
+/* --- Loading spinner (section title) --- */
+@keyframes loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--fg-muted);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: loading-spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-left: 5px;
+}
+
 /* --- BulkActions install button --- */
 .bulk-install-btn {
   font-size: 0.78rem;
