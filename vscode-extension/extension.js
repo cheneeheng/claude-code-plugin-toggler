@@ -241,6 +241,33 @@ function loadMarketplacePlugins(marketplaceKey, installLocation) {
   }
 }
 
+function fixProjectPathCase(pluginId, projectRoot) {
+  const installedPath = path.join(
+    os.homedir(), ".claude", "plugins", "installed_plugins.json"
+  );
+  if (!fs.existsSync(installedPath)) return;
+  try {
+    const data = JSON.parse(fs.readFileSync(installedPath, "utf8"));
+    const entries = (data.plugins || {})[pluginId] || [];
+    const normProject = normalisePath(projectRoot);
+    let changed = false;
+    for (const entry of entries) {
+      if (
+        entry.scope === "local" &&
+        entry.projectPath &&
+        normalisePath(entry.projectPath) === normProject &&
+        entry.projectPath !== projectRoot
+      ) {
+        entry.projectPath = projectRoot;
+        changed = true;
+      }
+    }
+    if (changed) {
+      fs.writeFileSync(installedPath, JSON.stringify(data, null, 2));
+    }
+  } catch {}
+}
+
 function streamInstall(pluginId, projectRoot, onLine) {
   return new Promise((resolve, reject) => {
     const proc = spawn("claude", ["plugin", "install", pluginId, "--scope", "local"], {
@@ -543,6 +570,8 @@ class SkillsViewProvider {
       const { id, scope } = msg;
       const projectRoot = this._projectRoot();
       if (!projectRoot) return;
+
+      if (scope === "local") fixProjectPathCase(id, projectRoot);
 
       webview.postMessage({ type: "uninstallStart", id });
 
