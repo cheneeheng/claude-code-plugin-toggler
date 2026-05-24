@@ -497,9 +497,11 @@
         .map((k) => `<span class="mp-keyword">${esc(k)}</span>`)
         .join("");
 
-      const btnLabel   = p.installed ? "Installed" : "Install &#8595;";
-      const btnDisabled = p.installed ? "disabled" : "";
-      const btnOnclick  = p.installed ? "" : `onclick="installPlugin('${esc(p.id)}')"`;
+      const btnLabel   = p.installed ? "Uninstall" : "Install &#8595;";
+      const btnOnclick = p.installed
+        ? `uninstallPlugin('${esc(p.id)}','${esc(p.installedScope)}')`
+        : `installPlugin('${esc(p.id)}')`;
+      const btnClass   = p.installed ? "mp-install-btn mp-install-btn--uninstall" : "mp-install-btn";
 
       return `
         <div class="mp-plugin-row" id="mp-row-${CSS.escape(p.id)}">
@@ -509,7 +511,7 @@
             ${scopeLabel}
           </div>
           <div class="mp-install-col">
-            <button class="mp-install-btn" id="mp-btn-${CSS.escape(p.id)}" ${btnDisabled} ${btnOnclick}>
+            <button class="${btnClass}" id="mp-btn-${CSS.escape(p.id)}" onclick="${btnOnclick}">
               ${btnLabel}
             </button>
           </div>
@@ -586,6 +588,76 @@
         btn.disabled = false;
         logEl.classList.remove("is-open");
         errEl.textContent = `Install failed: ${err.message}`;
+        errEl.classList.add("visible");
+      }
+    }
+
+    // ---- uninstall action ----
+    async function uninstallPlugin(id, scope) {
+      const btn   = document.getElementById(`mp-btn-${CSS.escape(id)}`);
+      const errEl = document.getElementById(`mp-err-${CSS.escape(id)}`);
+      const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
+
+      btn.textContent = "Uninstalling…";
+      btn.disabled = true;
+      errEl.textContent = "";
+      errEl.classList.remove("visible");
+      logEl.textContent = "";
+      logEl.classList.add("is-open");
+
+      try {
+        const res = await fetch("/api/uninstall-stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, scope }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        const reader  = res.body.getReader();
+        const decoder = new TextDecoder();
+        let   buffer  = "";
+        let   success = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop();
+
+          for (const part of parts) {
+            const dataLine = part.split("\n").find((l) => l.startsWith("data: "));
+            if (!dataLine) continue;
+            const payload = JSON.parse(dataLine.slice(6));
+
+            if (payload.type === "line") {
+              logEl.textContent += payload.text;
+              logEl.scrollTop = logEl.scrollHeight;
+            } else if (payload.type === "done") {
+              if (payload.ok) {
+                success = true;
+              } else {
+                throw new Error(payload.error || "Uninstall failed");
+              }
+            }
+          }
+        }
+
+        if (success) {
+          logEl.classList.remove("is-open");
+          await Promise.all([fetchPlugins(), fetchMarketplace()]);
+        }
+
+      } catch (err) {
+        btn.textContent = "Uninstall";
+        btn.disabled = false;
+        logEl.classList.remove("is-open");
+        errEl.textContent = `Uninstall failed: ${err.message}`;
         errEl.classList.add("visible");
       }
     }

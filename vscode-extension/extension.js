@@ -275,6 +275,40 @@ function streamInstall(pluginId, projectRoot, onLine) {
   });
 }
 
+function streamUninstall(pluginId, scope, projectRoot, onLine) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("claude", ["plugin", "uninstall", pluginId, "--scope", scope], {
+      cwd: projectRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdoutBuf = "";
+    proc.stdout.on("data", (chunk) => {
+      stdoutBuf += chunk.toString("utf8");
+      const lines = stdoutBuf.split("\n");
+      stdoutBuf = lines.pop();
+      lines.forEach((l) => onLine(l + "\n"));
+    });
+
+    let stderrBuf = "";
+    proc.stderr.on("data", (chunk) => {
+      stderrBuf += chunk.toString("utf8");
+      const lines = stderrBuf.split("\n");
+      stderrBuf = lines.pop();
+      lines.forEach((l) => onLine(l + "\n"));
+    });
+
+    proc.on("close", (code) => {
+      if (stdoutBuf) onLine(stdoutBuf);
+      if (stderrBuf) onLine(stderrBuf);
+      if (code === 0) resolve();
+      else reject(new Error(`Exit code ${code}`));
+    });
+
+    proc.on("error", reject);
+  });
+}
+
 function streamMarketplaceRefresh(projectRoot, onLine) {
   return new Promise((resolve, reject) => {
     const proc = spawn("claude", ["plugin", "marketplace", "update"], {
@@ -503,6 +537,32 @@ class SkillsViewProvider {
         this._refresh(webview);
       } catch (err) {
         webview.postMessage({ type: "installDone", id, ok: false, error: err.message });
+        this._refresh(webview);
+      }
+    } else if (msg.type === "uninstall") {
+      const { id, scope } = msg;
+      const projectRoot = this._projectRoot();
+      if (!projectRoot) return;
+
+      const confirmed = await vscode.window.showWarningMessage(
+        `Uninstall "${id}" from ${scope} scope?`,
+        { modal: true },
+        "Uninstall"
+      );
+      if (confirmed !== "Uninstall") {
+        this._refresh(webview);
+        return;
+      }
+
+      webview.postMessage({ type: "uninstallStart", id });
+
+      try {
+        await streamUninstall(id, scope, projectRoot, (line) => {
+          webview.postMessage({ type: "uninstallLine", id, text: line });
+        });
+        this._refresh(webview);
+      } catch (err) {
+        webview.postMessage({ type: "uninstallDone", id, ok: false, error: err.message });
         this._refresh(webview);
       }
     }

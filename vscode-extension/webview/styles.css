@@ -660,6 +660,17 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   cursor: default;
 }
 
+/* --- Uninstall button variant (ITER_12) --- */
+.mp-install-btn--uninstall {
+  border-color: var(--error, #c0392b);
+  color: var(--error, #c0392b);
+}
+
+.mp-install-btn--uninstall:hover:not(:disabled) {
+  background: var(--error, #c0392b);
+  color: #ffffff;
+}
+
 .mp-install-error {
   display: none;
   font-size: 0.72rem;

@@ -600,6 +600,56 @@ class RequestHandler(BaseHTTPRequestHandler):
             else:
                 send_event({"type": "done", "ok": False, "error": f"Exit code {proc.returncode}"})
 
+        elif self.path == "/api/uninstall-stream":
+            body = self._read_body()
+            plugin_id = body.get("id", "")
+            scope     = body.get("scope", "")
+
+            if "@" not in plugin_id:
+                self._send_json({"ok": False, "error": "Invalid plugin id format"}, 400)
+                return
+            if scope not in ("local", "global"):
+                self._send_json({"ok": False, "error": "scope must be 'local' or 'global'"}, 400)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+
+            def send_event(payload: dict):
+                line = json.dumps(payload, ensure_ascii=False)
+                self.wfile.write(f"data: {line}\n\n".encode("utf-8"))
+                self.wfile.flush()
+
+            try:
+                proc = subprocess.Popen(
+                    ["claude", "plugin", "uninstall", plugin_id, "--scope", scope],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    cwd=self.server.project_root,
+                )
+            except FileNotFoundError:
+                send_event({"type": "done", "ok": False, "error": "'claude' CLI not found on PATH"})
+                return
+
+            try:
+                for raw_line in iter(proc.stdout.readline, b""):
+                    text = raw_line.decode("utf-8", errors="replace")
+                    send_event({"type": "line", "text": text})
+            except (BrokenPipeError, ConnectionResetError):
+                proc.kill()
+                proc.wait()
+                return
+
+            proc.wait()
+
+            if proc.returncode == 0:
+                send_event({"type": "done", "ok": True})
+            else:
+                send_event({"type": "done", "ok": False, "error": f"Exit code {proc.returncode}"})
+
         elif self.path == "/api/marketplace-refresh":
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
