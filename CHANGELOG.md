@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-25
+
+### Added
+- Install/Uninstall toggle on marketplace plugin rows in both HTML and VSCode surfaces — streams progress output inline (2eb1138)
+- MIT `LICENSE` and marketplace-oriented `README.md` added to the VSCode extension for Marketplace publication (766191b)
+- HTML and VSCode user guides (`docs/user-guide-html.md`, `docs/user-guide-vscode.md`) (33b2186)
+
+### Fixed
+- Drive letter normalized to uppercase in VSCode `projectRoot` to prevent path-matching failures on Windows (fbcbf80)
+- Uninstall for Claude Code-managed plugins now resolves the correct uninstall path on Windows (b6093fd)
+- Scope passed to uninstall now read from `installed_plugins.json` instead of being hard-coded to `global` (9127499)
+- Install/uninstall broken on Windows due to drive-letter case mismatch and incorrect path separator handling (4cd9c8f)
+- Install/uninstall log area no longer hangs — delay added between stream open and first write (4a2a0f4)
+
 ## [0.5.0] - 2026-05-16
 
 ### Added
@@ -118,7 +132,8 @@ NOTE: Should have been 0.1.0 due to new features added.
 - Remove toggle confirmation dialog from VSCode extension to streamline UX (61ee55e)
 - Surface JSON parse errors to the caller instead of crashing silently (2d55100)
 
-[Unreleased]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.2.0...v0.3.0
