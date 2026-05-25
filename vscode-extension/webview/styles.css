@@ -660,6 +660,17 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   cursor: default;
 }
 
+/* --- Uninstall button variant (ITER_12) --- */
+.mp-install-btn--uninstall {
+  border-color: var(--error, #c0392b);
+  color: var(--error, #c0392b);
+}
+
+.mp-install-btn--uninstall:hover:not(:disabled) {
+  background: var(--error, #c0392b);
+  color: #ffffff;
+}
+
 .mp-install-error {
   display: none;
   font-size: 0.72rem;
@@ -714,6 +725,23 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   color: var(--fg-muted);
   cursor: default;
   opacity: 0.5;
+}
+
+/* --- Loading spinner (section title) --- */
+@keyframes loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--fg-muted);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: loading-spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-left: 5px;
 }
 
 /* --- BulkActions install button --- */

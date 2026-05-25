@@ -45,7 +45,7 @@
 
   <div id="plugin-sections" style="display:none">
     <div id="local-section">
-      <div class="section-title">Local plugins</div>
+      <div class="section-title">Local plugins <span id="loading-spinner" class="loading-spinner" style="display:none" title="Loading plugins..."></span></div>
       <div class="plugin-list" id="local-list"></div>
     </div>
     <div id="global-section">
@@ -59,7 +59,7 @@
       <button id="btn-enable-all">Enable all</button>
       <button id="btn-disable-all">Disable all</button>
     </div>
-    <button class="bulk-install-btn" id="btn-install-plugin" onclick="openInstallPanel()">+ Install plugin</button>
+    <button class="bulk-install-btn" id="btn-install-plugin" onclick="openInstallPanel()">+ Install/Uninstall plugin</button>
   </div>
 
   <div class="install-panel" id="install-panel"></div>
@@ -87,10 +87,14 @@
     let marketplaces = [];
     let installPanelOpen = false;
     let selectedMarketplace = null;
+    let operationInProgress = false;
 
     // ---- load ----
     async function fetchPlugins() {
-      showStatus("Loading plugins...");
+      const spinner = document.getElementById("loading-spinner");
+      if (document.getElementById("plugin-sections").style.display !== "none") {
+        spinner.style.display = "inline-block";
+      }
       try {
         const res = await fetch("/api/plugins");
         const data = await res.json();
@@ -110,6 +114,7 @@
         state.global = data.global || [];
         renderPlugins();
       } catch (err) {
+        document.getElementById("loading-spinner").style.display = "none";
         showError(`Failed to load plugins: ${err.message}`);
       }
     }
@@ -128,6 +133,7 @@
 
     // ---- render ----
     function renderPlugins() {
+      document.getElementById("loading-spinner").style.display = "none";
       const sections = document.getElementById("plugin-sections");
       const bulk = document.getElementById("bulk-actions");
 
@@ -497,9 +503,11 @@
         .map((k) => `<span class="mp-keyword">${esc(k)}</span>`)
         .join("");
 
-      const btnLabel   = p.installed ? "Installed" : "Install &#8595;";
-      const btnDisabled = p.installed ? "disabled" : "";
-      const btnOnclick  = p.installed ? "" : `onclick="installPlugin('${esc(p.id)}')"`;
+      const btnLabel   = p.installed ? "Uninstall" : "Install &#8595;";
+      const btnOnclick = p.installed
+        ? `uninstallPlugin('${esc(p.id)}','${esc(p.installedScope)}')`
+        : `installPlugin('${esc(p.id)}')`;
+      const btnClass   = p.installed ? "mp-install-btn mp-install-btn--uninstall" : "mp-install-btn";
 
       return `
         <div class="mp-plugin-row" id="mp-row-${CSS.escape(p.id)}">
@@ -509,7 +517,7 @@
             ${scopeLabel}
           </div>
           <div class="mp-install-col">
-            <button class="mp-install-btn" id="mp-btn-${CSS.escape(p.id)}" ${btnDisabled} ${btnOnclick}>
+            <button class="${btnClass}" id="mp-btn-${CSS.escape(p.id)}" onclick="${btnOnclick}">
               ${btnLabel}
             </button>
           </div>
@@ -526,6 +534,7 @@
       const errEl = document.getElementById(`mp-err-${CSS.escape(id)}`);
       const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
 
+      operationInProgress = true;
       btn.textContent = "Installing…";
       btn.disabled = true;
       errEl.textContent = "";
@@ -550,7 +559,7 @@
         let   buffer  = "";
         let   success = false;
 
-        while (true) {
+        outer: while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
@@ -572,20 +581,103 @@
               } else {
                 throw new Error(payload.error || "Install failed");
               }
+              break outer;
             }
           }
         }
+        reader.cancel().catch(() => {});
 
         if (success) {
-          logEl.classList.remove("is-open");
+          await new Promise((r) => setTimeout(r, 3000));
+          operationInProgress = false;
+          const liveLog = document.getElementById(`mp-log-${CSS.escape(id)}`);
+          if (liveLog) liveLog.classList.remove("is-open");
           await Promise.all([fetchPlugins(), fetchMarketplace()]);
         }
 
       } catch (err) {
+        operationInProgress = false;
         btn.innerHTML = "Install &#8595;";
         btn.disabled = false;
         logEl.classList.remove("is-open");
         errEl.textContent = `Install failed: ${err.message}`;
+        errEl.classList.add("visible");
+      }
+    }
+
+    // ---- uninstall action ----
+    async function uninstallPlugin(id, scope) {
+      const btn   = document.getElementById(`mp-btn-${CSS.escape(id)}`);
+      const errEl = document.getElementById(`mp-err-${CSS.escape(id)}`);
+      const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
+
+      operationInProgress = true;
+      btn.textContent = "Uninstalling…";
+      btn.disabled = true;
+      errEl.textContent = "";
+      errEl.classList.remove("visible");
+      logEl.textContent = "";
+      logEl.classList.add("is-open");
+
+      try {
+        const res = await fetch("/api/uninstall-stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, scope }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        const reader  = res.body.getReader();
+        const decoder = new TextDecoder();
+        let   buffer  = "";
+        let   success = false;
+
+        outer: while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop();
+
+          for (const part of parts) {
+            const dataLine = part.split("\n").find((l) => l.startsWith("data: "));
+            if (!dataLine) continue;
+            const payload = JSON.parse(dataLine.slice(6));
+
+            if (payload.type === "line") {
+              logEl.textContent += payload.text;
+              logEl.scrollTop = logEl.scrollHeight;
+            } else if (payload.type === "done") {
+              if (payload.ok) {
+                success = true;
+              } else {
+                throw new Error(payload.error || "Uninstall failed");
+              }
+              break outer;
+            }
+          }
+        }
+        reader.cancel().catch(() => {});
+
+        if (success) {
+          await new Promise((r) => setTimeout(r, 3000));
+          operationInProgress = false;
+          const liveLog = document.getElementById(`mp-log-${CSS.escape(id)}`);
+          if (liveLog) liveLog.classList.remove("is-open");
+          await Promise.all([fetchPlugins(), fetchMarketplace()]);
+        }
+
+      } catch (err) {
+        operationInProgress = false;
+        btn.textContent = "Uninstall";
+        btn.disabled = false;
+        logEl.classList.remove("is-open");
+        errEl.textContent = `Uninstall failed: ${err.message}`;
         errEl.classList.add("visible");
       }
     }
@@ -604,7 +696,7 @@
       es.onmessage = (event) => {
         if (event.data === "refresh") {
           fetchPlugins();
-          if (installPanelOpen) fetchMarketplace();
+          if (installPanelOpen && !operationInProgress) fetchMarketplace();
         }
       };
 

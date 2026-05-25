@@ -170,3 +170,79 @@
 **Impact / Risk:** Low — only affects `.vsix` metadata, not functionality. Can be corrected before any Marketplace publish.
 
 **Outcome:** `repository.url` set to `https://github.com/cheneeheng/skills-toggle`.
+
+---
+
+### Entry 010
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-05-24T00:00:00Z
+**Task:** ITER_12 — Helper method names in `/api/uninstall-stream`
+
+**Context:** The ITER_12 plan references `self._respond_json(...)` and `self._read_json_body()` in the new handler. The existing `server.py` (including the sibling `/api/install-stream` handler) uses `self._send_json(...)` and `self._read_body()`.
+
+**Decision / Action:** Used the existing method names `_send_json` and `_read_body` in the new handler. Did not rename or add aliases.
+
+**Rationale:** Minimum-change bias. The plan's names appear to be a drafting slip — every other handler in the file uses the existing names, and matching them keeps the new code consistent without an unrelated rename pass.
+
+**Impact / Risk:** None — purely a naming alignment.
+
+**Outcome:** `/api/uninstall-stream` calls `_send_json` for validation errors and `_read_body()` for the request body.
+
+---
+
+### Entry 011
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-05-24T00:00:00Z
+**Task:** ITER_12 — Frontend HTML-escape helper name
+
+**Context:** The plan's `renderMpPluginRow` snippet calls `escapeHtml(p.id)`. The existing codebase (both `html/index.html` and `vscode-extension/webview/panel.html`) defines and uses `esc(...)` for the same purpose; `escapeHtml` is not defined anywhere.
+
+**Decision / Action:** Used `esc(...)` instead of `escapeHtml(...)` in the updated marketplace row markup in both surfaces.
+
+**Rationale:** Plan terminology drift. Introducing `escapeHtml` as an alias would be a non-requested refactor.
+
+**Impact / Risk:** None — functionally identical.
+
+**Outcome:** Updated marketplace rows use the existing `esc()` helper.
+
+---
+
+### Entry 012
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-05-24T00:00:00Z
+**Task:** ITER_12 — Error handling in `/api/uninstall-stream`
+
+**Context:** The plan's snippet wraps the entire flow in a single broad `try/except` with `BrokenPipeError` and a generic `Exception`. The existing `/api/install-stream` handler uses a tighter pattern: a dedicated `try/except FileNotFoundError` for `Popen` (to report a missing `claude` CLI as a `done` event), then a separate `try/except (BrokenPipeError, ConnectionResetError)` around the stdout-read loop that kills the subprocess on client disconnect.
+
+**Decision / Action:** Mirrored the existing install-stream error-handling structure exactly rather than the plan's looser version.
+
+**Rationale:** The plan explicitly says "exact mirror" of `/api/install-stream`. The existing handler's structure is stricter and handles the "claude CLI missing" case as a stream event (better UX than dropping the connection), so mirroring it is more faithful to the plan's stated intent than copying its inline snippet verbatim.
+
+**Impact / Risk:** Low — both surfaces of the install path already use this pattern; no new behaviour was introduced.
+
+**Outcome:** Uninstall stream handles `FileNotFoundError`, `BrokenPipeError`, and `ConnectionResetError` identically to install stream.
+
+---
+
+### Entry 013
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-05-24T00:00:00Z
+**Task:** ITER_12 — `uninstallPlugin()` in `panel.html` not shared with `index.html`
+
+**Context:** The plan describes `uninstallPlugin()` as "a single shared function (both surfaces)" with a VSCode guard at the top that posts a message and returns. The existing codebase does not actually share files between the two surfaces — `installPlugin()` is implemented separately in `html/index.html` (full SSE body) and `vscode-extension/webview/panel.html` (a thin `vscodeApi.postMessage` shim).
+
+**Decision / Action:** Followed the existing per-surface split: `html/index.html` got the full SSE consumer body; `panel.html` got a thin `uninstallPlugin(id, scope)` that just posts `{ type: 'uninstall', id, scope }`.
+
+**Rationale:** No file-sharing mechanism exists between `html/` and `vscode-extension/webview/`; the "shared function" framing in the plan is aspirational. Matching the existing `installPlugin` split keeps diffs minimal and consistent.
+
+**Impact / Risk:** None — behaviour is identical to what the plan describes; only the duplication pattern differs.
+
+**Outcome:** `uninstallPlugin` exists in both files, mirroring how `installPlugin` is structured today.

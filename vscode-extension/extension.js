@@ -70,12 +70,14 @@ function loadInstalledPlugins(projectRoot) {
           id: pluginId,
           version: localEntry.version || "",
           installPath: localEntry.installPath || "",
+          scope: localEntry.scope || "local",
         });
       } else if (globalEntry) {
         global_.push({
           id: pluginId,
           version: globalEntry.version || "",
           installPath: globalEntry.installPath || "",
+          scope: globalEntry.scope || "user",
         });
       }
     }
@@ -239,11 +241,13 @@ function loadMarketplacePlugins(marketplaceKey, installLocation) {
   }
 }
 
+
 function streamInstall(pluginId, projectRoot, onLine) {
   return new Promise((resolve, reject) => {
     const proc = spawn("claude", ["plugin", "install", pluginId, "--scope", "local"], {
       cwd: projectRoot,
       stdio: ["ignore", "pipe", "pipe"],
+      shell: true,
     });
 
     let stdoutBuf = "";
@@ -275,11 +279,47 @@ function streamInstall(pluginId, projectRoot, onLine) {
   });
 }
 
+function streamUninstall(pluginId, scope, projectRoot, onLine) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("claude", ["plugin", "uninstall", pluginId, "--scope", scope], {
+      cwd: projectRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: true,
+    });
+
+    let stdoutBuf = "";
+    proc.stdout.on("data", (chunk) => {
+      stdoutBuf += chunk.toString("utf8");
+      const lines = stdoutBuf.split("\n");
+      stdoutBuf = lines.pop();
+      lines.forEach((l) => onLine(l + "\n"));
+    });
+
+    let stderrBuf = "";
+    proc.stderr.on("data", (chunk) => {
+      stderrBuf += chunk.toString("utf8");
+      const lines = stderrBuf.split("\n");
+      stderrBuf = lines.pop();
+      lines.forEach((l) => onLine(l + "\n"));
+    });
+
+    proc.on("close", (code) => {
+      if (stdoutBuf) onLine(stdoutBuf);
+      if (stderrBuf) onLine(stderrBuf);
+      if (code === 0) resolve();
+      else reject(new Error(`Exit code ${code}`));
+    });
+
+    proc.on("error", reject);
+  });
+}
+
 function streamMarketplaceRefresh(projectRoot, onLine) {
   return new Promise((resolve, reject) => {
     const proc = spawn("claude", ["plugin", "marketplace", "update"], {
       cwd: projectRoot,
       stdio: ["ignore", "pipe", "pipe"],
+      shell: true,
     });
 
     let stdoutBuf = "", stderrBuf = "";
@@ -370,7 +410,11 @@ class SkillsViewProvider {
   _projectRoot() {
     const folders = vscode.workspace.workspaceFolders;
     if (!folders || folders.length === 0) return null;
-    return folders[0].uri.fsPath;
+    const p = folders[0].uri.fsPath;
+    // VSCode returns lowercase drive letters on Windows; normalize to uppercase
+    // so spawn's cwd matches what the CLI writes to installed_plugins.json.
+    if (/^[a-z]:/.test(p)) return p[0].toUpperCase() + p.slice(1);
+    return p;
   }
 
   _refresh(webview) {
@@ -417,8 +461,9 @@ class SkillsViewProvider {
         });
       plugins.local = [...plugins.local, ...orphans];
 
-      const installedLocal = new Set((raw.local || []).map((e) => e.id));
-      const installedGlobal = new Set((raw.global || []).map((e) => e.id));
+      const installedScopeMap = new Map();
+      for (const e of (raw.local || [])) installedScopeMap.set(e.id, e.scope || "local");
+      for (const e of (raw.global || [])) installedScopeMap.set(e.id, e.scope || "user");
 
       const marketplacesMeta = loadKnownMarketplaces();
       const marketplaces = marketplacesMeta.map((m) => {
@@ -433,15 +478,9 @@ class SkillsViewProvider {
         } else {
           entry.plugins = mpPlugins.map((p) => {
             const pid = `${p.name}@${m.key}`;
-            let installed = false,
-              installedScope = null;
-            if (installedLocal.has(pid)) {
-              installed = true;
-              installedScope = "local";
-            } else if (installedGlobal.has(pid)) {
-              installed = true;
-              installedScope = "global";
-            }
+            const realScope = installedScopeMap.get(pid);
+            const installed = realScope !== undefined;
+            const installedScope = realScope ?? null;
             return { ...p, marketplace: m.key, id: pid, installed, installedScope };
           });
         }
@@ -500,10 +539,26 @@ class SkillsViewProvider {
         await streamInstall(id, projectRoot, (line) => {
           webview.postMessage({ type: "installLine", id, text: line });
         });
+        webview.postMessage({ type: "installDone", id, ok: true });
         this._refresh(webview);
       } catch (err) {
         webview.postMessage({ type: "installDone", id, ok: false, error: err.message });
+      }
+    } else if (msg.type === "uninstall") {
+      const { id, scope } = msg;
+      const projectRoot = this._projectRoot();
+      if (!projectRoot) return;
+
+      webview.postMessage({ type: "uninstallStart", id });
+
+      try {
+        await streamUninstall(id, scope, projectRoot, (line) => {
+          webview.postMessage({ type: "uninstallLine", id, text: line });
+        });
+        webview.postMessage({ type: "uninstallDone", id, ok: true });
         this._refresh(webview);
+      } catch (err) {
+        webview.postMessage({ type: "uninstallDone", id, ok: false, error: err.message });
       }
     }
   }

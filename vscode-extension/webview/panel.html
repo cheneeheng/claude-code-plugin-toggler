@@ -48,7 +48,7 @@
       <button id="btn-enable-all">Enable all</button>
       <button id="btn-disable-all">Disable all</button>
     </div>
-    <button class="bulk-install-btn" id="btn-install-plugin" onclick="openInstallPanel()">+ Install plugin</button>
+    <button class="bulk-install-btn" id="btn-install-plugin" onclick="openInstallPanel()">+ Install/Uninstall plugin</button>
   </div>
 
   <div class="install-panel" id="install-panel"></div>
@@ -59,6 +59,7 @@
     let marketplaces = [];
     let installPanelOpen = false;
     let selectedMarketplace = null;
+    let operationInProgress = false;
 
     window.addEventListener("message", (event) => {
       const msg = event.data;
@@ -79,7 +80,7 @@
           selectedMarketplace = null;
         }
         renderPlugins();
-        if (installPanelOpen) renderInstallPanel();
+        if (installPanelOpen && !operationInProgress) renderInstallPanel();
       } else if (msg.type === "error") {
         showError(msg.message);
       } else if (msg.type === "marketplaceRefreshStart") {
@@ -101,6 +102,7 @@
         }
       } else if (msg.type === "installStart") {
         const { id } = event.data;
+        operationInProgress = true;
         const btn   = document.getElementById(`mp-btn-${CSS.escape(id)}`);
         const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
         if (btn)   { btn.textContent = "Installing…"; btn.disabled = true; }
@@ -114,13 +116,55 @@
         }
       } else if (msg.type === "installDone") {
         const { id, ok, error } = event.data;
-        if (!ok) {
+        if (ok) {
+          setTimeout(() => {
+            operationInProgress = false;
+            const liveLog = document.getElementById(`mp-log-${CSS.escape(id)}`);
+            if (liveLog) liveLog.classList.remove("is-open");
+            if (installPanelOpen) renderInstallPanel();
+          }, 3000);
+        } else {
+          operationInProgress = false;
           const btn   = document.getElementById(`mp-btn-${CSS.escape(id)}`);
           const errEl = document.getElementById(`mp-err-${CSS.escape(id)}`);
           const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
           if (btn)   { btn.textContent = "Install ↓"; btn.disabled = false; }
           if (logEl) logEl.classList.remove("is-open");
           if (errEl) { errEl.textContent = `Install failed: ${error}`; errEl.classList.add("visible"); }
+        }
+      } else if (msg.type === "uninstallStart") {
+        const { id } = event.data;
+        operationInProgress = true;
+        const btn   = document.getElementById(`mp-btn-${CSS.escape(id)}`);
+        const errEl = document.getElementById(`mp-err-${CSS.escape(id)}`);
+        const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
+        if (btn)   { btn.textContent = "Uninstalling…"; btn.disabled = true; }
+        if (errEl) { errEl.textContent = ""; errEl.classList.remove("visible"); }
+        if (logEl) { logEl.textContent = ""; logEl.classList.add("is-open"); }
+      } else if (msg.type === "uninstallLine") {
+        const { id, text } = event.data;
+        const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
+        if (logEl) {
+          logEl.textContent += text;
+          logEl.scrollTop = logEl.scrollHeight;
+        }
+      } else if (msg.type === "uninstallDone") {
+        const { id, ok, error } = event.data;
+        if (ok) {
+          setTimeout(() => {
+            operationInProgress = false;
+            const liveLog = document.getElementById(`mp-log-${CSS.escape(id)}`);
+            if (liveLog) liveLog.classList.remove("is-open");
+            if (installPanelOpen) renderInstallPanel();
+          }, 3000);
+        } else {
+          operationInProgress = false;
+          const btn   = document.getElementById(`mp-btn-${CSS.escape(id)}`);
+          const errEl = document.getElementById(`mp-err-${CSS.escape(id)}`);
+          const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
+          if (btn)   { btn.textContent = "Uninstall"; btn.disabled = false; }
+          if (logEl) logEl.classList.remove("is-open");
+          if (errEl) { errEl.textContent = `Uninstall failed: ${error}`; errEl.classList.add("visible"); }
         }
       }
     });
@@ -314,9 +358,11 @@
         .map((k) => `<span class="mp-keyword">${esc(k)}</span>`)
         .join("");
 
-      const btnLabel    = p.installed ? "Installed" : "Install &#8595;";
-      const btnDisabled = p.installed ? "disabled" : "";
-      const btnOnclick  = p.installed ? "" : `onclick="installPlugin('${esc(p.id)}')"`;
+      const btnLabel   = p.installed ? "Uninstall" : "Install &#8595;";
+      const btnOnclick = p.installed
+        ? `uninstallPlugin('${esc(p.id)}','${esc(p.installedScope)}')`
+        : `installPlugin('${esc(p.id)}')`;
+      const btnClass   = p.installed ? "mp-install-btn mp-install-btn--uninstall" : "mp-install-btn";
 
       return `
         <div class="mp-plugin-row" id="mp-row-${CSS.escape(p.id)}">
@@ -326,7 +372,7 @@
             ${scopeLabel}
           </div>
           <div class="mp-install-col">
-            <button class="mp-install-btn" id="mp-btn-${CSS.escape(p.id)}" ${btnDisabled} ${btnOnclick}>
+            <button class="${btnClass}" id="mp-btn-${CSS.escape(p.id)}" onclick="${btnOnclick}">
               ${btnLabel}
             </button>
           </div>
@@ -350,6 +396,12 @@
 
     function installLocalPlugin(id) {
       vscodeApi.postMessage({ type: "install", id });
+    }
+
+    function uninstallPlugin(id, scope) {
+      // Extension shows modal confirmation, then drives the uninstall.
+      // UI updates arrive as uninstallStart / uninstallLine / uninstallDone messages.
+      vscodeApi.postMessage({ type: "uninstall", id, scope });
     }
 
     // ---- bulk ----

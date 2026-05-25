@@ -127,12 +127,14 @@ def load_installed_plugins(project_root: Path) -> dict:
                 "id": plugin_id,
                 "version": local_entry.get("version", ""),
                 "installPath": local_entry.get("installPath", ""),
+                "scope": local_entry.get("scope", "local"),
             })
         elif global_entry:
             global_result.append({
                 "id": plugin_id,
                 "version": global_entry.get("version", ""),
                 "installPath": global_entry.get("installPath", ""),
+                "scope": global_entry.get("scope", "user"),
             })
 
     return {"local": local_result, "global": global_result}
@@ -277,8 +279,11 @@ def build_marketplace_response(project_root: Path) -> dict:
     installed_plugins.json for the current project_root.
     """
     raw_installed = load_installed_plugins(project_root)
-    installed_local  = {e["id"] for e in raw_installed.get("local", [])}
-    installed_global = {e["id"] for e in raw_installed.get("global", [])}
+    installed_scope_map: dict[str, str] = {}
+    for e in raw_installed.get("local", []):
+        installed_scope_map[e["id"]] = e.get("scope", "local")
+    for e in raw_installed.get("global", []):
+        installed_scope_map[e["id"]] = e.get("scope", "user")
 
     marketplaces_meta = load_known_marketplaces()
     if not marketplaces_meta:
@@ -298,10 +303,8 @@ def build_marketplace_response(project_root: Path) -> dict:
             annotated = []
             for p in plugins_raw:
                 pid = f"{p['name']}@{m['key']}"
-                if pid in installed_local:
-                    installed, scope = True, "local"
-                elif pid in installed_global:
-                    installed, scope = True, "global"
+                if pid in installed_scope_map:
+                    installed, scope = True, installed_scope_map[pid]
                 else:
                     installed, scope = False, None
                 annotated.append({
@@ -319,6 +322,13 @@ def build_marketplace_response(project_root: Path) -> dict:
 
 class SkillsServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        import sys
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionAbortedError, ConnectionResetError, BrokenPipeError)):
+            return
+        super().handle_error(request, client_address)
 
     def __init__(self, server_address, RequestHandlerClass, project_root: Path):
         super().__init__(server_address, RequestHandlerClass)
@@ -576,6 +586,56 @@ class RequestHandler(BaseHTTPRequestHandler):
             try:
                 proc = subprocess.Popen(
                     ["claude", "plugin", "install", plugin_id, "--scope", "local"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    cwd=self.server.project_root,
+                )
+            except FileNotFoundError:
+                send_event({"type": "done", "ok": False, "error": "'claude' CLI not found on PATH"})
+                return
+
+            try:
+                for raw_line in iter(proc.stdout.readline, b""):
+                    text = raw_line.decode("utf-8", errors="replace")
+                    send_event({"type": "line", "text": text})
+            except (BrokenPipeError, ConnectionResetError):
+                proc.kill()
+                proc.wait()
+                return
+
+            proc.wait()
+
+            if proc.returncode == 0:
+                send_event({"type": "done", "ok": True})
+            else:
+                send_event({"type": "done", "ok": False, "error": f"Exit code {proc.returncode}"})
+
+        elif self.path == "/api/uninstall-stream":
+            body = self._read_body()
+            plugin_id = body.get("id", "")
+            scope     = body.get("scope", "")
+
+            if "@" not in plugin_id:
+                self._send_json({"ok": False, "error": "Invalid plugin id format"}, 400)
+                return
+            if scope not in ("local", "user", "project"):
+                self._send_json({"ok": False, "error": "scope must be 'local', 'user', or 'project'"}, 400)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+
+            def send_event(payload: dict):
+                line = json.dumps(payload, ensure_ascii=False)
+                self.wfile.write(f"data: {line}\n\n".encode("utf-8"))
+                self.wfile.flush()
+
+            try:
+                proc = subprocess.Popen(
+                    ["claude", "plugin", "uninstall", plugin_id, "--scope", scope],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     cwd=self.server.project_root,
