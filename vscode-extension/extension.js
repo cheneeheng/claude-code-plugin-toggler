@@ -241,32 +241,6 @@ function loadMarketplacePlugins(marketplaceKey, installLocation) {
   }
 }
 
-function fixProjectPathCase(pluginId, projectRoot) {
-  const installedPath = path.join(
-    os.homedir(), ".claude", "plugins", "installed_plugins.json"
-  );
-  if (!fs.existsSync(installedPath)) return;
-  try {
-    const data = JSON.parse(fs.readFileSync(installedPath, "utf8"));
-    const entries = (data.plugins || {})[pluginId] || [];
-    const normProject = normalisePath(projectRoot);
-    let changed = false;
-    for (const entry of entries) {
-      if (
-        entry.scope === "local" &&
-        entry.projectPath &&
-        normalisePath(entry.projectPath) === normProject &&
-        entry.projectPath !== projectRoot
-      ) {
-        entry.projectPath = projectRoot;
-        changed = true;
-      }
-    }
-    if (changed) {
-      fs.writeFileSync(installedPath, JSON.stringify(data, null, 2));
-    }
-  } catch {}
-}
 
 function streamInstall(pluginId, projectRoot, onLine) {
   return new Promise((resolve, reject) => {
@@ -436,7 +410,11 @@ class SkillsViewProvider {
   _projectRoot() {
     const folders = vscode.workspace.workspaceFolders;
     if (!folders || folders.length === 0) return null;
-    return folders[0].uri.fsPath;
+    const p = folders[0].uri.fsPath;
+    // VSCode returns lowercase drive letters on Windows; normalize to uppercase
+    // so spawn's cwd matches what the CLI writes to installed_plugins.json.
+    if (/^[a-z]:/.test(p)) return p[0].toUpperCase() + p.slice(1);
+    return p;
   }
 
   _refresh(webview) {
@@ -570,8 +548,6 @@ class SkillsViewProvider {
       const { id, scope } = msg;
       const projectRoot = this._projectRoot();
       if (!projectRoot) return;
-
-      if (scope === "local") fixProjectPathCase(id, projectRoot);
 
       webview.postMessage({ type: "uninstallStart", id });
 
