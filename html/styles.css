@@ -440,6 +440,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   max-height: 600px;
   margin-top: 6px;
   border-left-color: var(--border);
+  overflow-y: auto;
 }
 
 .skill-row {
