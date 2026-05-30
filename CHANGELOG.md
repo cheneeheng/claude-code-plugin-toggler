@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-05-30
+
+### Fixed
+- Expanded skills/agents list now scrolls instead of clipping plugins with many entries — `overflow-y: auto` added to the open `.skills-list` (9f8163a)
+
 ## [0.6.0] - 2026-05-25
 
 ### Added
@@ -132,7 +137,8 @@ NOTE: Should have been 0.1.0 due to new features added.
 - Remove toggle confirmation dialog from VSCode extension to streamline UX (61ee55e)
 - Surface JSON parse errors to the caller instead of crashing silently (2d55100)
 
-[Unreleased]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/cheneeheng/claude-code-plugin-toggler/compare/v0.3.0...v0.4.0
