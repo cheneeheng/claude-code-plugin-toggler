@@ -11,11 +11,31 @@
         "lastUpdated": "2026-01-01T00:00:00.000Z"
       }
     ],
-    "smoke-global@smoke-market": [
+    "smoke-project@smoke-market": [
       {
-        "scope": "global",
+        "scope": "project",
+        "projectPath": "__PROJECT_ROOT__",
+        "installPath": "",
+        "version": "1.1.0",
+        "installedAt": "2026-01-01T00:00:00.000Z",
+        "lastUpdated": "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    "smoke-user@smoke-market": [
+      {
+        "scope": "user",
         "installPath": "",
         "version": "2.0.0",
+        "installedAt": "2026-01-01T00:00:00.000Z",
+        "lastUpdated": "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    "smoke-other@smoke-market": [
+      {
+        "scope": "local",
+        "projectPath": "__OTHER_ROOT__",
+        "installPath": "",
+        "version": "9.9.9",
         "installedAt": "2026-01-01T00:00:00.000Z",
         "lastUpdated": "2026-01-01T00:00:00.000Z"
       }

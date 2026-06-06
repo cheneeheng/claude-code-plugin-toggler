@@ -33,6 +33,16 @@
           "name": "Plugins"
         }
       ]
+    },
+    "configuration": {
+      "title": "Skills Toggle",
+      "properties": {
+        "skillsToggle.confirmActions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ask for confirmation before enabling/disabling or uninstalling a plugin. When off, these actions apply immediately."
+        }
+      }
     }
   },
   "scripts": {

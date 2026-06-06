@@ -17,6 +17,12 @@ function _mockPlugins() {
   };
 }
 
+function confirmActionsEnabled() {
+  return vscode.workspace
+    .getConfiguration("skillsToggle")
+    .get("confirmActions", false);
+}
+
 function normalisePath(p) {
   if (!p) return "";
   try {
@@ -552,21 +558,23 @@ class SkillsViewProvider {
       if (!projectRoot) return;
       if (!["local", "project", "user"].includes(scope)) return;
 
-      // Confirmation — wording escalates with blast radius
-      const where =
-        scope === "project"
-          ? "the shared .claude/settings.json (committed, affects your team)"
-          : scope === "user"
-          ? "your user settings (~/.claude/settings.json, affects all your projects)"
-          : ".claude/settings.local.json (just you, this project)";
-      const ok = await vscode.window.showWarningMessage(
-        `Set "${id}" to ${enabled ? "enabled" : "disabled"} in ${where}?`,
-        { modal: scope !== "local" },
-        "Confirm"
-      );
-      if (ok !== "Confirm") {
-        this._refresh(webview); // reset the toggle's visual state
-        return;
+      // Confirmation — wording escalates with blast radius. Skipped unless opted in.
+      if (confirmActionsEnabled()) {
+        const where =
+          scope === "project"
+            ? "the shared .claude/settings.json (committed, affects your team)"
+            : scope === "user"
+            ? "your user settings (~/.claude/settings.json, affects all your projects)"
+            : ".claude/settings.local.json (just you, this project)";
+        const ok = await vscode.window.showWarningMessage(
+          `Set "${id}" to ${enabled ? "enabled" : "disabled"} in ${where}?`,
+          { modal: scope !== "local" },
+          "Confirm"
+        );
+        if (ok !== "Confirm") {
+          this._refresh(webview); // reset the toggle's visual state
+          return;
+        }
       }
 
       const load = { local: loadSettingsLocal, project: loadSettingsProject, user: loadSettingsUser };
@@ -615,15 +623,17 @@ class SkillsViewProvider {
       if (!projectRoot) return;
       if (!["local", "project", "user"].includes(scope)) return;
 
-      const scopeLabel = { local: "Local", project: "Project", user: "User" }[scope];
-      const ok = await vscode.window.showWarningMessage(
-        `Uninstall "${id}" from the ${scopeLabel} scope?`,
-        { modal: true },
-        "Uninstall"
-      );
-      if (ok !== "Uninstall") {
-        this._refresh(webview);
-        return;
+      if (confirmActionsEnabled()) {
+        const scopeLabel = { local: "Local", project: "Project", user: "User" }[scope];
+        const ok = await vscode.window.showWarningMessage(
+          `Uninstall "${id}" from the ${scopeLabel} scope?`,
+          { modal: true },
+          "Uninstall"
+        );
+        if (ok !== "Uninstall") {
+          this._refresh(webview);
+          return;
+        }
       }
 
       webview.postMessage({ type: "uninstallStart", id });

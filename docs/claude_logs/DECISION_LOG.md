@@ -276,3 +276,20 @@
 **Decision:** `installedScopes` is emitted only on `/api/plugins`; the per-plugin `installed`/`installedScope` annotation was removed from `build_marketplace_response`. The frontend's marketplace panel reads the global `installedScopesMap` (set on every plugins fetch) to decide per-scope install vs. installed tags.
 
 **Impact / Risk:** The marketplace panel now depends on a prior `/api/plugins` load for install state. Initial load fetches both; the panel starts closed and re-renders on plugins load, so the map is always populated before display. Element-id helper naming also deviated from the plan's single `sectionEls` (split into `sectionInstallEls`/`sectionUninstallEls` + runtime `mpScopeVal`) to avoid embedding CSS.escape output into onclick string literals.
+
+---
+
+### Entry 014
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-06-07T00:00:00Z
+**Task:** Smoke test coverage scope after three-scope migration
+
+**Context:** The existing smoke tests (and fixtures) asserted the removed `global`/`pluginScope` contract and POSTed `/api/toggle` without the now-required `scope` — they fail against current `server.py`. Asked to "cover all the different possible cases," but several endpoints/paths cannot be exercised safely or deterministically: `/api/install-stream`, `/api/uninstall-stream`, `/api/marketplace-refresh` shell out to the real `claude` CLI; user-scope toggle writes the real `~/.claude/settings.json`.
+
+**Decision:** Rewrote fixtures + `smoke.sh`/`smoke.ps1` for the three-scope model. Covered: `/api/plugins` shape, three-scope bucketing, cross-project exclusion (added a `smoke-other` fixture entry under a different `projectPath`), row fields, enabled defaults, `installedScopes`, mock fallback; `/api/toggle` happy paths for local + project plus all four 400 validations; `/api/marketplace` shape; `/api/set-project` invalid-path 400. Excluded the three CLI-streaming endpoints and any user-scope *write*; user scope is verified read-only. Used containment (not exact equality) for the user bucket and mock-mode sections because `build_sections` unions installed plugins with settings and `load_settings_user` reads the real home file.
+
+**Impact / Risk:** Tests are CI-oriented (fresh runner home). Locally they still overwrite then delete `~/.claude/plugins/installed_plugins.json` (pre-existing destructive cleanup) — flagged to the user; not auto-fixed. Streaming endpoints remain unverified by smoke tests.
+
+**Outcome:** `bash -n` and PowerShell parser both pass; not executed locally to avoid clobbering the real plugin registry.

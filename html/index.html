@@ -645,8 +645,12 @@
 
       es.onmessage = (event) => {
         if (event.data === "refresh") {
+          // While a streamed install/uninstall is finishing, defer the refresh so the
+          // result log stays visible for its 3s window. _streamOp re-fetches plugins +
+          // marketplace itself once that window closes.
+          if (operationInProgress) return;
           fetchPlugins();
-          if (installPanelOpen && !operationInProgress) fetchMarketplace();
+          if (installPanelOpen) fetchMarketplace();
         }
       };
 

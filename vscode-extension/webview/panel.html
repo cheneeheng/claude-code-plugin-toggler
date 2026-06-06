@@ -91,8 +91,12 @@
         if (selectedMarketplace && !marketplaces.find((m) => m.key === selectedMarketplace)) {
           selectedMarketplace = null;
         }
+        // While a streamed install/uninstall is finishing, defer re-rendering so the
+        // result log stays visible for its 3s window. opDone's completion timeout
+        // re-renders from the state stored just above.
+        if (operationInProgress) return;
         renderPlugins();
-        if (installPanelOpen && !operationInProgress) renderInstallPanel();
+        if (installPanelOpen) renderInstallPanel();
       } else if (msg.type === "error") {
         showError(msg.message);
       } else if (msg.type === "marketplaceRefreshStart") {
@@ -146,7 +150,11 @@
         setTimeout(() => {
           operationInProgress = false;
           delete pendingOps[id];
-          // A fresh { type: 'load' } from the extension re-renders everything.
+          // The { type: 'load' } that arrived at *Done time was deferred while
+          // operationInProgress was true. Re-render now from that stored state so
+          // section rows + install panel reset and the streamed log clears.
+          renderPlugins();
+          if (installPanelOpen) renderInstallPanel();
         }, 3000);
       } else {
         operationInProgress = false;

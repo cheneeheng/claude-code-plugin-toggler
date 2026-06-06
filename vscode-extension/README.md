@@ -53,7 +53,7 @@ Plugins appear in two sections:
 | **Local** | Has an explicit entry in `.claude/settings.local.json`. Toggle on/off directly. |
 | **Inherited** | No local override — treated as enabled by Claude Code. Click **Localize** first to pin it before toggling. |
 
-**Enabling / disabling** — flip the toggle on any Local plugin. A confirmation dialog appears before writing. The change takes effect on the next Claude Code session.
+**Enabling / disabling** — flip the toggle on any Local plugin. The change applies immediately and takes effect on the next Claude Code session. To require a confirmation dialog first, enable `Skills Toggle: Confirm Actions` in settings (see [Settings](#settings)).
 
 **Localizing an inherited plugin** — click **Localize** in the Inherited section. On confirm, the plugin moves to Local with its current state pinned.
 
@@ -68,13 +68,19 @@ Each plugin row shows a skill count badge. Click it to expand an inline list of 
 1. Click **+ Install plugin** (right of the bulk-actions row).
 2. Select a marketplace from the dropdown.
 3. Browse the list — each row shows name, version, install status, description, and tags.
-4. Click **Install** and confirm. The panel refreshes automatically on success.
+4. Click **Install**. The panel refreshes automatically on success.
 
 > If `claude` is not on `PATH`, the error appears inline in the plugin row at install time.
 
 ## Live updates
 
 The extension watches `.claude/settings.local.json` and `~/.claude/plugins/installed_plugins.json`. The panel refreshes automatically when either file changes.
+
+## Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `skillsToggle.confirmActions` | `false` | Ask for confirmation before enabling/disabling or uninstalling a plugin. When off, these actions apply immediately. |
 
 ## Troubleshooting
 
