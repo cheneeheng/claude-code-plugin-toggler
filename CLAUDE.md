@@ -41,7 +41,7 @@ Both surfaces use the same read/merge/write logic (implemented independently in 
 
 - `server.py` stdlib only — no pip dependencies.
 - If `installed_plugins.json` is missing, `server.py` falls back to `MOCK_PLUGINS` and sets `"mock": true` in the API response.
-- VSCode extension shows `showWarningMessage` confirmation before writing; on cancel, re-posts current state to reset the webview toggle.
+- VSCode extension confirmation is opt-in via the `skillsToggle.confirmActions` setting (default `false`). When enabled, toggle/uninstall show a `showWarningMessage`; on cancel, current state is re-posted to reset the webview toggle. When disabled (default), these actions apply immediately.
 - CORS in `server.py` is restricted to `http://localhost` only.
 - No npm runtime dependencies — `@types/vscode` is dev-only.
 

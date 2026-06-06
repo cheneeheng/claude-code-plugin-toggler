@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-07
+
+### Added
+- Three-scope plugin model: plugins are grouped into Local, Project, and User scopes, each backed by its own settings file, with per-scope toggle and install/uninstall (fa533dd)
+- `skillsToggle.confirmActions` VSCode setting (default `false`) to gate the enable/disable and uninstall confirmation dialogs — actions apply immediately unless opted in (573b4c3)
+
+### Fixed
+- Streamed install/uninstall result log now stays visible for 3s before the plugin row refreshes, in both the HTML and VSCode surfaces — previously the uninstall row (and its log) vanished instantly (573b4c3)
+
+### Chore
+- Smoke tests and fixtures rewritten for the three-scope model with expanded coverage: scope bucketing, cross-project exclusion, toggle validations, marketplace/set-project, and mock fallback (573b4c3)
+
 ## [0.6.1] - 2026-05-30
 
 ### Fixed

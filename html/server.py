@@ -53,7 +53,8 @@ def _mock_plugins() -> dict:
         "local": [
             {"id": "ceh-dev-tools@ceh-plugins", "version": "1.1.0", "installPath": ""}
         ],
-        "global": [
+        "project": [],
+        "user": [
             {"id": "frontend-design@anthropic", "version": "2.0.1", "installPath": ""}
         ],
         "mock": True,
@@ -83,14 +84,18 @@ def normalise_path(p: str) -> str:
 
 def load_installed_plugins(project_root: Path) -> dict:
     """
-    Returns { "local": [...], "global": [...] }
+    Returns { "local": [...], "project": [...], "user": [...] }
     Each entry: { "id", "version", "installPath" }
 
-    Local  = scope=="local" and projectPath matches project_root (path-normalised).
-    Global = scope!="local" OR no projectPath field.
+    Bucketing by each install entry's scope (installed_plugins.json schema:
+    { "version": 2, "plugins": { id: [entries] } }, each entry carrying
+    scope ∈ local/project/user, optional projectPath, installPath, version):
+      - scope=="local"   → local bucket   iff projectPath matches project_root
+      - scope=="project" → project bucket iff projectPath matches project_root
+      - scope=="user"    → user bucket    (no projectPath constraint)
+    Entries for other projects' local/project installs are skipped.
 
-    If a plugin id appears in both local (for this project) and global entries,
-    it is placed in local only — local wins.
+    A plugin may appear in more than one bucket (one entry per scope).
 
     If installed_plugins.json is missing, returns mock data (includes "mock": True).
     """
@@ -101,43 +106,25 @@ def load_installed_plugins(project_root: Path) -> dict:
     raw = json.loads(installed_path.read_text(encoding="utf-8"))['plugins']
     norm_project = normalise_path(str(project_root))
 
-    local_result: list[dict] = []
-    global_result: list[dict] = []
+    buckets: dict[str, list[dict]] = {"local": [], "project": [], "user": []}
 
     for plugin_id, entries in raw.items():
-        local_entry = None
-        global_entry = None
-
         for entry in entries:
-            is_local_scope = entry.get("scope") == "local"
-            entry_project = entry.get("projectPath", "")
-            matches_project = (
-                normalise_path(entry_project) == norm_project if entry_project else False
-            )
-
-            if is_local_scope and matches_project:
-                local_entry = entry
-                break
-            elif not is_local_scope and global_entry is None:
-                global_entry = entry
-            # local-scoped entries for OTHER projects are intentionally ignored
-
-        if local_entry:
-            local_result.append({
+            scope = entry.get("scope")
+            if scope not in buckets:
+                continue
+            if scope in ("local", "project"):
+                entry_project = entry.get("projectPath", "")
+                if not entry_project or normalise_path(entry_project) != norm_project:
+                    continue  # belongs to a different project
+            buckets[scope].append({
                 "id": plugin_id,
-                "version": local_entry.get("version", ""),
-                "installPath": local_entry.get("installPath", ""),
-                "scope": local_entry.get("scope", "local"),
-            })
-        elif global_entry:
-            global_result.append({
-                "id": plugin_id,
-                "version": global_entry.get("version", ""),
-                "installPath": global_entry.get("installPath", ""),
-                "scope": global_entry.get("scope", "user"),
+                "version": entry.get("version", ""),
+                "installPath": entry.get("installPath", ""),
+                "scope": scope,
             })
 
-    return {"local": local_result, "global": global_result}
+    return buckets
 
 
 def load_plugin_skills(install_path: str) -> list[dict]:
@@ -175,6 +162,39 @@ def load_plugin_agents(install_path: str) -> list[dict]:
     return agents
 
 
+def _hook_detail(h: dict) -> str:
+    # 'command' is the common case (and the documented example); render its command string.
+    if h.get("type") == "command":
+        return h.get("command", "")
+    # http / mcp_tool / prompt / agent: field names vary — show a compact dump of the
+    # non-type fields rather than inventing key names. Refine when real examples appear.
+    return json.dumps({k: v for k, v in h.items() if k != "type"}, ensure_ascii=False)
+
+
+def load_plugin_hooks(install_path: str) -> list[dict]:
+    """Reads <install_path>/hooks/hooks.json.
+    Returns [] if missing/unparseable. Each item:
+      { "event": str, "matcher": str, "actions": [ { "type": str, "detail": str } ] }"""
+    if not install_path:
+        return []
+    path = Path(install_path) / "hooks" / "hooks.json"
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return []
+    result = []
+    for event, groups in (data.get("hooks") or {}).items():
+        for group in groups or []:
+            actions = [
+                {"type": h.get("type", ""), "detail": _hook_detail(h)}
+                for h in group.get("hooks", [])
+            ]
+            result.append({"event": event, "matcher": group.get("matcher", ""), "actions": actions})
+    return result
+
+
 def load_settings_local(project_root: Path) -> dict:
     path = project_root / ".claude" / "settings.local.json"
     if not path.exists():
@@ -186,6 +206,30 @@ def load_settings_local(project_root: Path) -> dict:
         raise ValueError(str(path)) from e
 
 
+def load_settings_project(project_root: Path) -> dict:
+    """Reads <project>/.claude/settings.json (PROJECT scope, committed).
+    Mirror of load_settings_local; {} if missing/unparseable."""
+    path = Path(project_root) / ".claude" / "settings.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return {}
+
+
+def load_settings_user() -> dict:
+    """Reads ~/.claude/settings.json (USER scope, all projects).
+    Mirror of load_settings_local; {} if missing/unparseable."""
+    path = Path.home() / ".claude" / "settings.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return {}
+
+
 def save_settings_local(project_root: Path, settings: dict) -> None:
     dir_ = project_root / ".claude"
     dir_.mkdir(parents=True, exist_ok=True)
@@ -194,35 +238,52 @@ def save_settings_local(project_root: Path, settings: dict) -> None:
         json.dump(settings, f, indent=2)
 
 
-def merge(raw: dict, settings: dict) -> dict:
-    """
-    raw = { "local": [...], "global": [...] } from load_installed_plugins() (mock key already removed)
-    settings = dict from load_settings_local()
-    Returns { "local": [...], "global": [...] } with full plugin dicts.
-    """
-    enabled_map = settings.get("enabledPlugins", {})
+def save_settings_project(project_root: Path, settings: dict) -> None:
+    path = Path(project_root) / ".claude" / "settings.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
 
-    def build(entry: dict, plugin_scope: str) -> dict:
-        pid = entry["id"]
-        name, marketplace = pid.split("@", 1)
-        install_path = entry.get("installPath", "")
-        result: dict = {
-            "id": pid,
-            "name": name,
-            "marketplace": marketplace,
-            "version": entry.get("version", ""),
-            "pluginScope": plugin_scope,
-            "skills": load_plugin_skills(install_path),
-            "agents": load_plugin_agents(install_path),
-        }
-        if plugin_scope == "local":
-            result["enabled"] = enabled_map.get(pid, True)
-        return result
 
-    return {
-        "local":  [build(e, "local")  for e in raw["local"]],
-        "global": [build(e, "global") for e in raw["global"]],
-    }
+def save_settings_user(settings: dict) -> None:
+    path = Path.home() / ".claude" / "settings.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+
+
+def build_sections(raw: dict, settings: dict) -> dict:
+    """
+    raw      = { "local": [...], "project": [...], "user": [...] } from load_installed_plugins()
+               (each entry: {id, version, installPath}; projectPath already matched at load time)
+    settings = { "local": {enabledPlugins}, "project": {enabledPlugins}, "user": {enabledPlugins} }
+    Returns  { "local": [rows], "project": [rows], "user": [rows] }
+
+    A plugin id belongs to a section if it is installed at that scope OR keyed in that
+    scope's enabledPlugins (registry ∪ settings, per scope).
+    """
+    def section(scope: str) -> list[dict]:
+        installed_entries = {e["id"]: e for e in raw[scope]}
+        enabled_map = settings[scope]
+        ids = set(installed_entries) | set(enabled_map)  # union: registry ∪ this scope's settings
+        rows = []
+        for pid in sorted(ids):
+            name, marketplace = pid.split("@", 1) if "@" in pid else (pid, "")
+            entry = installed_entries.get(pid)
+            installed = entry is not None
+            install_path = entry.get("installPath", "") if installed else ""
+            rows.append({
+                "id": pid,
+                "name": name,
+                "marketplace": marketplace,
+                "version": entry.get("version", "") if installed else "",
+                "scope": scope,
+                "enabled": enabled_map.get(pid, True),  # default: enabled
+                "installed": installed,
+                "skills": load_plugin_skills(install_path) if installed else [],
+                "agents": load_plugin_agents(install_path) if installed else [],
+                "hooks":  load_plugin_hooks(install_path) if installed else [],
+            })
+        return rows
+    return {s: section(s) for s in ("local", "project", "user")}
 
 
 def load_known_marketplaces() -> list[dict]:
@@ -275,16 +336,9 @@ def load_marketplace_plugins(marketplace_key: str, install_location: str) -> tup
 def build_marketplace_response(project_root: Path) -> dict:
     """
     Combines known_marketplaces.json with each marketplace's marketplace.json.
-    Annotates each plugin with installed/installedScope derived from
-    installed_plugins.json for the current project_root.
+    Per-scope install state is supplied separately via the installedScopes map on
+    /api/plugins (ITER_17); the frontend uses that to decide install/installed per scope.
     """
-    raw_installed = load_installed_plugins(project_root)
-    installed_scope_map: dict[str, str] = {}
-    for e in raw_installed.get("local", []):
-        installed_scope_map[e["id"]] = e.get("scope", "local")
-    for e in raw_installed.get("global", []):
-        installed_scope_map[e["id"]] = e.get("scope", "user")
-
     marketplaces_meta = load_known_marketplaces()
     if not marketplaces_meta:
         return {"marketplaces": [], "error": "known_marketplaces.json not found"}
@@ -300,21 +354,10 @@ def build_marketplace_response(project_root: Path) -> dict:
             entry["plugins"] = []
             entry["error"] = err
         else:
-            annotated = []
-            for p in plugins_raw:
-                pid = f"{p['name']}@{m['key']}"
-                if pid in installed_scope_map:
-                    installed, scope = True, installed_scope_map[pid]
-                else:
-                    installed, scope = False, None
-                annotated.append({
-                    **p,
-                    "marketplace": m["key"],
-                    "id": pid,
-                    "installed": installed,
-                    "installedScope": scope,
-                })
-            entry["plugins"] = annotated
+            entry["plugins"] = [
+                {**p, "marketplace": m["key"], "id": f"{p['name']}@{m['key']}"}
+                for p in plugins_raw
+            ]
         result.append(entry)
 
     return {"marketplaces": result}
@@ -341,7 +384,9 @@ class SkillsServer(ThreadingMixIn, HTTPServer):
     def _watched_paths(self) -> list[Path]:
         return [
             PLUGINS_BASE / "installed_plugins.json",
-            Path(self.project_root) / ".claude" / "settings.local.json",
+            Path.home() / ".claude" / "settings.json",                    # user
+            Path(self.project_root) / ".claude" / "settings.json",        # project
+            Path(self.project_root) / ".claude" / "settings.local.json",  # local
         ]
 
     def _start_watcher(self) -> None:
@@ -439,47 +484,31 @@ class RequestHandler(BaseHTTPRequestHandler):
             try:
                 raw = load_installed_plugins(project_root)
                 is_mock = raw.pop("mock", False)
-                settings = load_settings_local(project_root)
-
-                # Case 2: plugins in installed_plugins.json absent from settings → add enabled:true
-                if not is_mock:
-                    enabled_plugins = settings.get("enabledPlugins", {})
-                    changed = False
-                    for entry in raw.get("local", []):
-                        if entry["id"] not in enabled_plugins:
-                            enabled_plugins[entry["id"]] = True
-                            changed = True
-                    if changed:
-                        settings["enabledPlugins"] = enabled_plugins
-                        save_settings_local(project_root, settings)
-
-                merged = merge(raw, settings)
-
-                # Case 1: plugins in settings but not installed → orphans with install button
-                installed_local_ids = {e["id"] for e in raw.get("local", [])}
-                for pid in settings.get("enabledPlugins", {}):
-                    if pid not in installed_local_ids:
-                        at_idx = pid.find("@")
-                        name = pid[:at_idx] if at_idx != -1 else pid
-                        marketplace = pid[at_idx + 1:] if at_idx != -1 else ""
-                        merged["local"].append({
-                            "id": pid,
-                            "name": name,
-                            "marketplace": marketplace,
-                            "version": "",
-                            "pluginScope": "local",
-                            "skills": [],
-                            "agents": [],
-                            "installed": False,
-                        })
-
+                settings = {
+                    "local":   load_settings_local(project_root).get("enabledPlugins", {}),
+                    "project": load_settings_project(project_root).get("enabledPlugins", {}),
+                    "user":    load_settings_user().get("enabledPlugins", {}),
+                }
+                sections = build_sections(raw, settings)
             except ValueError as exc:
                 failed_path = str(exc)
                 self._send_json(
                     {"error": f"Failed to parse {failed_path}", "path": failed_path}, 500
                 )
                 return
-            payload = {**merged, "project_root": str(project_root)}
+
+            # Per-id installed-scopes map for the marketplace panel (ITER_17)
+            installed_scopes: dict[str, list[str]] = {}
+            for scope in ("local", "project", "user"):
+                for p in sections[scope]:
+                    if p["installed"]:
+                        installed_scopes.setdefault(p["id"], []).append(scope)
+
+            payload = {
+                **sections,
+                "installedScopes": installed_scopes,
+                "project_root": str(project_root),
+            }
             if is_mock:
                 payload["mock"] = True
             self._send_json(payload)
@@ -522,25 +551,48 @@ class RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/api/toggle":
             body = self._read_body()
-            plugin_id = body.get("id")
+            plugin_id = body.get("id", "")
             enabled = body.get("enabled")
-            if not isinstance(plugin_id, str) or not isinstance(enabled, bool):
-                self._send_json({"ok": False, "error": "invalid payload"}, 400)
+            scope = body.get("scope", "")
+
+            if "@" not in plugin_id:
+                self._send_json({"ok": False, "error": "Invalid plugin id format"}, 400)
                 return
-            project_root = self.server.project_root
-            raw = load_installed_plugins(project_root)
-            raw.pop("mock", None)
-            local_ids = {e["id"] for e in raw.get("local", [])}
-            if plugin_id not in local_ids:
+            if scope not in ("local", "project", "user"):
                 self._send_json(
-                    {"ok": False, "error": "Plugin is not installed locally for this project"}, 400
+                    {"ok": False, "error": "scope must be local, project, or user"}, 400
                 )
                 return
-            settings = load_settings_local(project_root)
-            if "enabledPlugins" not in settings:
-                settings["enabledPlugins"] = {}
-            settings["enabledPlugins"][plugin_id] = enabled
-            save_settings_local(project_root, settings)
+            if not isinstance(enabled, bool):
+                self._send_json({"ok": False, "error": "enabled must be a boolean"}, 400)
+                return
+
+            root = self.server.project_root
+
+            def read_scope(s):
+                if s == "local":   return load_settings_local(root)
+                if s == "project": return load_settings_project(root)
+                return load_settings_user()
+
+            def write_scope(s, settings):
+                if s == "local":     save_settings_local(root, settings)
+                elif s == "project": save_settings_project(root, settings)
+                else:                save_settings_user(settings)
+
+            # Guard: the id must belong to this scope's section (registry-at-scope ∪ settings-at-scope)
+            raw = load_installed_plugins(root)
+            raw.pop("mock", None)
+            installed_ids = {e["id"] for e in raw.get(scope, [])}
+            settings = read_scope(scope)
+            section_ids = installed_ids | set(settings.get("enabledPlugins", {}))
+            if plugin_id not in section_ids:
+                self._send_json(
+                    {"ok": False, "error": f"{plugin_id} is not present in {scope} scope"}, 400
+                )
+                return
+
+            settings.setdefault("enabledPlugins", {})[plugin_id] = enabled
+            write_scope(scope, settings)
             self._send_json({"ok": True})
 
         elif self.path == "/api/set-project":
@@ -559,16 +611,14 @@ class RequestHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/install-stream":
             body = self._read_body()
             plugin_id = body.get("id", "")
+            scope = body.get("scope", "local")
 
             if "@" not in plugin_id:
                 self._send_json({"ok": False, "error": "Invalid plugin id format"}, 400)
                 return
-
-            marketplace_key = plugin_id.split("@", 1)[1]
-            known = load_known_marketplaces()
-            if marketplace_key not in {m["key"] for m in known}:
+            if scope not in ("local", "project", "user"):
                 self._send_json(
-                    {"ok": False, "error": f"Unknown marketplace: {marketplace_key}"}, 400
+                    {"ok": False, "error": "scope must be local, project, or user"}, 400
                 )
                 return
 
@@ -585,7 +635,7 @@ class RequestHandler(BaseHTTPRequestHandler):
 
             try:
                 proc = subprocess.Popen(
-                    ["claude", "plugin", "install", plugin_id, "--scope", "local"],
+                    ["claude", "plugin", "install", plugin_id, "--scope", scope],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     cwd=self.server.project_root,

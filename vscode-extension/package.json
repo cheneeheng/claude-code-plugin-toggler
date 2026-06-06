@@ -2,7 +2,7 @@
   "name": "skills-toggle",
   "displayName": "Skills Toggle",
   "description": "Manage Claude Code skill plugins per project from a VSCode sidebar.",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "publisher": "ceh-plugins",
   "repository": {
     "type": "git",
@@ -33,6 +33,16 @@
           "name": "Plugins"
         }
       ]
+    },
+    "configuration": {
+      "title": "Skills Toggle",
+      "properties": {
+        "skillsToggle.confirmActions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ask for confirmation before enabling/disabling or uninstalling a plugin. When off, these actions apply immediately."
+        }
+      }
     }
   },
   "scripts": {

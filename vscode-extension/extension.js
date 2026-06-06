@@ -9,11 +9,18 @@ function _mockPlugins() {
     local: [
       { id: "ceh-dev-tools@ceh-plugins", version: "1.1.0", installPath: "" },
     ],
-    global: [
+    project: [],
+    user: [
       { id: "frontend-design@anthropic", version: "2.0.1", installPath: "" },
     ],
     mock: true,
   };
+}
+
+function confirmActionsEnabled() {
+  return vscode.workspace
+    .getConfiguration("skillsToggle")
+    .get("confirmActions", false);
 }
 
 function normalisePath(p) {
@@ -43,46 +50,26 @@ function loadInstalledPlugins(projectRoot) {
   try {
     const raw = JSON.parse(fs.readFileSync(installedPath, "utf8"))["plugins"];
     const normProject = normalisePath(projectRoot);
-    const local = [],
-      global_ = [];
+    const buckets = { local: [], project: [], user: [] };
 
     for (const [pluginId, entries] of Object.entries(raw)) {
-      let localEntry = null,
-        globalEntry = null;
-
       for (const entry of entries) {
-        const isLocal = entry.scope === "local";
-        const entryProject = entry.projectPath
-          ? normalisePath(entry.projectPath)
-          : null;
-        const matchesProject = entryProject === normProject;
-
-        if (isLocal && matchesProject) {
-          localEntry = entry;
-          break;
+        const scope = entry.scope;
+        if (!(scope in buckets)) continue;
+        if (scope === "local" || scope === "project") {
+          const entryProject = entry.projectPath ? normalisePath(entry.projectPath) : null;
+          if (entryProject !== normProject) continue; // belongs to a different project
         }
-        if (!isLocal && !globalEntry) globalEntry = entry;
-        // local-scoped entries for OTHER projects are intentionally ignored
-      }
-
-      if (localEntry) {
-        local.push({
+        buckets[scope].push({
           id: pluginId,
-          version: localEntry.version || "",
-          installPath: localEntry.installPath || "",
-          scope: localEntry.scope || "local",
-        });
-      } else if (globalEntry) {
-        global_.push({
-          id: pluginId,
-          version: globalEntry.version || "",
-          installPath: globalEntry.installPath || "",
-          scope: globalEntry.scope || "user",
+          version: entry.version || "",
+          installPath: entry.installPath || "",
+          scope,
         });
       }
     }
 
-    return { local, global: global_ };
+    return buckets;
   } catch (e) {
     throw new Error(`Failed to parse installed_plugins.json: ${e.message}`);
   }
@@ -98,11 +85,49 @@ function loadSettingsLocal(projectRoot) {
   }
 }
 
+function loadSettingsProject(projectRoot) {
+  const p = path.join(projectRoot, ".claude", "settings.json");
+  if (!fs.existsSync(p)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function loadSettingsUser() {
+  const p = path.join(os.homedir(), ".claude", "settings.json");
+  if (!fs.existsSync(p)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
 function saveSettingsLocal(projectRoot, settings) {
   const dir = path.join(projectRoot, ".claude");
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, "settings.local.json"),
+    JSON.stringify(settings, null, 2)
+  );
+}
+
+function saveSettingsProject(projectRoot, settings) {
+  const dir = path.join(projectRoot, ".claude");
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "settings.json"),
+    JSON.stringify(settings, null, 2)
+  );
+}
+
+function saveSettingsUser(settings) {
+  const dir = path.join(os.homedir(), ".claude");
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "settings.json"),
     JSON.stringify(settings, null, 2)
   );
 }
@@ -170,26 +195,72 @@ function loadPluginAgents(installPath) {
     });
 }
 
-function buildPluginList(raw, enabledMap) {
-  function build(entry, pluginScope) {
-    const atIdx = entry.id.indexOf("@");
-    const name = atIdx === -1 ? entry.id : entry.id.slice(0, atIdx);
-    const marketplace = atIdx === -1 ? "" : entry.id.slice(atIdx + 1);
-    const result = {
-      id: entry.id,
-      name,
-      marketplace,
-      version: entry.version || "",
-      pluginScope,
-      skills: loadPluginSkills(entry.installPath),
-      agents: loadPluginAgents(entry.installPath),
-    };
-    if (pluginScope === "local") result.enabled = enabledMap[entry.id] ?? true;
-    return result;
+function _hookDetail(h) {
+  // 'command' is the common case (and the documented example); render its command string.
+  if (h.type === "command") return h.command || "";
+  // http / mcp_tool / prompt / agent: field names vary — show a compact dump of the
+  // non-type fields rather than inventing key names. Refine when real examples appear.
+  const rest = {};
+  for (const [k, v] of Object.entries(h)) if (k !== "type") rest[k] = v;
+  return JSON.stringify(rest);
+}
+
+function loadPluginHooks(installPath) {
+  if (!installPath) return [];
+  const p = path.join(installPath, "hooks", "hooks.json");
+  if (!fs.existsSync(p)) return [];
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch {
+    return [];
+  }
+  const result = [];
+  for (const [event, groups] of Object.entries(data.hooks || {})) {
+    for (const group of groups || []) {
+      const actions = (group.hooks || []).map((h) => ({
+        type: h.type || "",
+        detail: _hookDetail(h),
+      }));
+      result.push({ event, matcher: group.matcher || "", actions });
+    }
+  }
+  return result;
+}
+
+function buildSections(raw, settings) {
+  // raw      = { local, project, user } from loadInstalledPlugins
+  // settings = { local: enabledPlugins, project: enabledPlugins, user: enabledPlugins }
+  function section(scope) {
+    const installedEntries = {};
+    for (const e of raw[scope]) installedEntries[e.id] = e;
+    const enabledMap = settings[scope];
+    const ids = new Set([...Object.keys(installedEntries), ...Object.keys(enabledMap)]);
+    return [...ids].sort().map((pid) => {
+      const atIdx = pid.indexOf("@");
+      const name = atIdx === -1 ? pid : pid.slice(0, atIdx);
+      const marketplace = atIdx === -1 ? "" : pid.slice(atIdx + 1);
+      const entry = installedEntries[pid];
+      const installed = entry !== undefined;
+      const installPath = installed ? entry.installPath || "" : "";
+      return {
+        id: pid,
+        name,
+        marketplace,
+        version: installed ? entry.version || "" : "",
+        scope,
+        enabled: enabledMap[pid] ?? true,
+        installed,
+        skills: installed ? loadPluginSkills(installPath) : [],
+        agents: installed ? loadPluginAgents(installPath) : [],
+        hooks: installed ? loadPluginHooks(installPath) : [],
+      };
+    });
   }
   return {
-    local: raw.local.map((e) => build(e, "local")),
-    global: raw.global.map((e) => build(e, "global")),
+    local: section("local"),
+    project: section("project"),
+    user: section("user"),
   };
 }
 
@@ -242,9 +313,9 @@ function loadMarketplacePlugins(marketplaceKey, installLocation) {
 }
 
 
-function streamInstall(pluginId, projectRoot, onLine) {
+function streamInstall(pluginId, scope, projectRoot, onLine) {
   return new Promise((resolve, reject) => {
-    const proc = spawn("claude", ["plugin", "install", pluginId, "--scope", "local"], {
+    const proc = spawn("claude", ["plugin", "install", pluginId, "--scope", scope], {
       cwd: projectRoot,
       stdio: ["ignore", "pipe", "pipe"],
       shell: true,
@@ -377,10 +448,6 @@ class SkillsViewProvider {
     // File watchers — auto-refresh on settings or installed_plugins change
     const folders = vscode.workspace.workspaceFolders;
     if (folders && folders.length > 0) {
-      const settingsPattern = new vscode.RelativePattern(
-        folders[0],
-        ".claude/settings.local.json"
-      );
       const installedPath = path.join(
         os.homedir(),
         ".claude",
@@ -388,22 +455,28 @@ class SkillsViewProvider {
         "installed_plugins.json"
       );
 
-      const settingsWatcher =
-        vscode.workspace.createFileSystemWatcher(settingsPattern);
+      const onchange = () => this._refresh(webviewView.webview);
+
+      // Local + project settings — workspace-relative
+      const settingsWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(folders[0], ".claude/settings.local.json")
+      );
+      const projectSettingsWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(folders[0], ".claude/settings.json")
+      );
+      // User settings + install registry — absolute paths (outside the workspace)
+      const userSettingsWatcher = vscode.workspace.createFileSystemWatcher(
+        path.join(os.homedir(), ".claude", "settings.json")
+      );
       const installedWatcher =
         vscode.workspace.createFileSystemWatcher(installedPath);
 
-      const onchange = () => this._refresh(webviewView.webview);
-
-      settingsWatcher.onDidChange(onchange);
-      settingsWatcher.onDidCreate(onchange);
-      settingsWatcher.onDidDelete(onchange);
-
-      installedWatcher.onDidChange(onchange);
-      installedWatcher.onDidCreate(onchange);
-      installedWatcher.onDidDelete(onchange);
-
-      this._context.subscriptions.push(settingsWatcher, installedWatcher);
+      for (const w of [settingsWatcher, projectSettingsWatcher, userSettingsWatcher, installedWatcher]) {
+        w.onDidChange(onchange);
+        w.onDidCreate(onchange);
+        w.onDidDelete(onchange);
+        this._context.subscriptions.push(w);
+      }
     }
   }
 
@@ -426,44 +499,24 @@ class SkillsViewProvider {
     try {
       const raw = loadInstalledPlugins(projectRoot);
       const isMock = raw.mock || false;
-      let settings = loadSettingsLocal(projectRoot);
 
-      // Case 2: plugins in installed_plugins.json but absent from settings → add enabled:true
-      if (!isMock) {
-        const enabledPlugins = settings.enabledPlugins || {};
-        let changed = false;
-        for (const entry of (raw.local || [])) {
-          if (!(entry.id in enabledPlugins)) {
-            enabledPlugins[entry.id] = true;
-            changed = true;
-          }
-        }
-        if (changed) {
-          settings.enabledPlugins = enabledPlugins;
-          saveSettingsLocal(projectRoot, settings);
-        }
-      }
-
-      const plugins = buildPluginList(
-        { local: raw.local || [], global: raw.global || [] },
-        settings.enabledPlugins || {}
+      const settings = {
+        local: loadSettingsLocal(projectRoot).enabledPlugins || {},
+        project: loadSettingsProject(projectRoot).enabledPlugins || {},
+        user: loadSettingsUser().enabledPlugins || {},
+      };
+      const sections = buildSections(
+        { local: raw.local || [], project: raw.project || [], user: raw.user || [] },
+        settings
       );
 
-      // Case 1: plugins in settings but not installed → show as orphans with install button
-      const installedLocalIds = new Set((raw.local || []).map((e) => e.id));
-      const orphans = Object.keys(settings.enabledPlugins || {})
-        .filter((id) => !installedLocalIds.has(id))
-        .map((id) => {
-          const atIdx = id.indexOf("@");
-          const name = atIdx === -1 ? id : id.slice(0, atIdx);
-          const marketplace = atIdx === -1 ? "" : id.slice(atIdx + 1);
-          return { id, name, marketplace, version: "", pluginScope: "local", skills: [], agents: [], installed: false };
-        });
-      plugins.local = [...plugins.local, ...orphans];
-
-      const installedScopeMap = new Map();
-      for (const e of (raw.local || [])) installedScopeMap.set(e.id, e.scope || "local");
-      for (const e of (raw.global || [])) installedScopeMap.set(e.id, e.scope || "user");
+      // Per-id installed-scopes map for the marketplace panel (ITER_17)
+      const installedScopes = {};
+      for (const scope of ["local", "project", "user"]) {
+        for (const p of sections[scope]) {
+          if (p.installed) (installedScopes[p.id] = installedScopes[p.id] || []).push(scope);
+        }
+      }
 
       const marketplacesMeta = loadKnownMarketplaces();
       const marketplaces = marketplacesMeta.map((m) => {
@@ -476,20 +529,19 @@ class SkillsViewProvider {
           entry.plugins = [];
           entry.error = error;
         } else {
-          entry.plugins = mpPlugins.map((p) => {
-            const pid = `${p.name}@${m.key}`;
-            const realScope = installedScopeMap.get(pid);
-            const installed = realScope !== undefined;
-            const installedScope = realScope ?? null;
-            return { ...p, marketplace: m.key, id: pid, installed, installedScope };
-          });
+          entry.plugins = mpPlugins.map((p) => ({
+            ...p,
+            marketplace: m.key,
+            id: `${p.name}@${m.key}`,
+          }));
         }
         return entry;
       });
 
       webview.postMessage({
         type: "load",
-        plugins,
+        plugins: sections,
+        installedScopes,
         marketplaces,
         projectRoot,
         mock: isMock,
@@ -501,18 +553,38 @@ class SkillsViewProvider {
 
   async _onMessage(webview, msg) {
     if (msg.type === "toggle") {
-      const { id, enabled } = msg;
+      const { id, enabled, scope } = msg;
       const projectRoot = this._projectRoot();
       if (!projectRoot) return;
+      if (!["local", "project", "user"].includes(scope)) return;
 
-      const raw = loadInstalledPlugins(projectRoot);
-      const localIds = new Set((raw.local || []).map((e) => e.id));
-      if (!localIds.has(id)) return;
+      // Confirmation — wording escalates with blast radius. Skipped unless opted in.
+      if (confirmActionsEnabled()) {
+        const where =
+          scope === "project"
+            ? "the shared .claude/settings.json (committed, affects your team)"
+            : scope === "user"
+            ? "your user settings (~/.claude/settings.json, affects all your projects)"
+            : ".claude/settings.local.json (just you, this project)";
+        const ok = await vscode.window.showWarningMessage(
+          `Set "${id}" to ${enabled ? "enabled" : "disabled"} in ${where}?`,
+          { modal: scope !== "local" },
+          "Confirm"
+        );
+        if (ok !== "Confirm") {
+          this._refresh(webview); // reset the toggle's visual state
+          return;
+        }
+      }
 
-      const settings = loadSettingsLocal(projectRoot);
+      const load = { local: loadSettingsLocal, project: loadSettingsProject, user: loadSettingsUser };
+      const settings = scope === "user" ? load.user() : load[scope](projectRoot);
       if (!settings.enabledPlugins) settings.enabledPlugins = {};
       settings.enabledPlugins[id] = enabled;
-      saveSettingsLocal(projectRoot, settings);
+      if (scope === "local") saveSettingsLocal(projectRoot, settings);
+      else if (scope === "project") saveSettingsProject(projectRoot, settings);
+      else saveSettingsUser(settings);
+
       this._refresh(webview);
     } else if (msg.type === "marketplaceRefresh") {
       const projectRoot = this._projectRoot();
@@ -529,14 +601,15 @@ class SkillsViewProvider {
         this._refresh(webview);
       }
     } else if (msg.type === "install") {
-      const { id } = msg;
+      const { id, scope } = msg;
       const projectRoot = this._projectRoot();
       if (!projectRoot) return;
+      const installScope = ["local", "project", "user"].includes(scope) ? scope : "local";
 
       webview.postMessage({ type: "installStart", id });
 
       try {
-        await streamInstall(id, projectRoot, (line) => {
+        await streamInstall(id, installScope, projectRoot, (line) => {
           webview.postMessage({ type: "installLine", id, text: line });
         });
         webview.postMessage({ type: "installDone", id, ok: true });
@@ -548,6 +621,20 @@ class SkillsViewProvider {
       const { id, scope } = msg;
       const projectRoot = this._projectRoot();
       if (!projectRoot) return;
+      if (!["local", "project", "user"].includes(scope)) return;
+
+      if (confirmActionsEnabled()) {
+        const scopeLabel = { local: "Local", project: "Project", user: "User" }[scope];
+        const ok = await vscode.window.showWarningMessage(
+          `Uninstall "${id}" from the ${scopeLabel} scope?`,
+          { modal: true },
+          "Uninstall"
+        );
+        if (ok !== "Uninstall") {
+          this._refresh(webview);
+          return;
+        }
+      }
 
       webview.postMessage({ type: "uninstallStart", id });
 
