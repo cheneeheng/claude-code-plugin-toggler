@@ -246,3 +246,33 @@
 **Impact / Risk:** None — behaviour is identical to what the plan describes; only the duplication pattern differs.
 
 **Outcome:** `uninstallPlugin` exists in both files, mirroring how `installPlugin` is structured today.
+
+---
+
+### Entry 002
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-06-06T00:00:00Z
+**Task:** ITER_13–17 — bulk Enable/Disable scope
+
+**Context:** The three-scope model (ITER_13) splits plugins into Local/Project/User, but the pre-existing "Enable all / Disable all" bulk buttons predate it and the plans never address how bulk interacts with three scopes.
+
+**Decision:** Bulk toggle operates on the **Local** section only — the lowest-blast-radius scope and the only one writable before this work. Project/User bulk flips would touch committed/cross-project state and the plans do not request it.
+
+**Impact / Risk:** Bulk no longer affects Project/User rows (it never reached them before either). In VSCode, each bulk toggle still routes through the per-toggle confirmation added by ITER_14 (non-modal for Local), so "Enable all" can prompt once per Local plugin. Acceptable; a single batched-confirm path was out of scope.
+
+---
+
+### Entry 003
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-06-06T00:00:00Z
+**Task:** ITER_17 — marketplace install-state source
+
+**Context:** ITER_17 introduces a per-id `installedScopes` map and says to put it on the `/api/plugins` (or marketplace) payload. The HTML server has a separate `/api/marketplace` endpoint that previously annotated each plugin with single `installed`/`installedScope` fields.
+
+**Decision:** `installedScopes` is emitted only on `/api/plugins`; the per-plugin `installed`/`installedScope` annotation was removed from `build_marketplace_response`. The frontend's marketplace panel reads the global `installedScopesMap` (set on every plugins fetch) to decide per-scope install vs. installed tags.
+
+**Impact / Risk:** The marketplace panel now depends on a prior `/api/plugins` load for install state. Initial load fetches both; the panel starts closed and re-renders on plugins load, so the map is always populated before display. Element-id helper naming also deviated from the plan's single `sectionEls` (split into `sectionInstallEls`/`sectionUninstallEls` + runtime `mpScopeVal`) to avoid embedding CSS.escape output into onclick string literals.

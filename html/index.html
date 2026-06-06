@@ -48,9 +48,13 @@
       <div class="section-title">Local plugins <span id="loading-spinner" class="loading-spinner" style="display:none" title="Loading plugins..."></span></div>
       <div class="plugin-list" id="local-list"></div>
     </div>
-    <div id="global-section">
-      <div class="section-title">Global plugins</div>
-      <div class="plugin-list" id="global-list"></div>
+    <div id="project-section">
+      <div class="section-title">Project plugins</div>
+      <div class="plugin-list" id="project-list"></div>
+    </div>
+    <div id="user-section">
+      <div class="section-title">User plugins</div>
+      <div class="plugin-list" id="user-list"></div>
     </div>
   </div>
 
@@ -83,7 +87,10 @@
     });
 
     // ---- state ----
-    let state = { local: [], global: [] };
+    const SCOPES = ["local", "project", "user"];
+    const SCOPE_LABELS = { local: "Local", project: "Project", user: "User" };
+    let state = { local: [], project: [], user: [] };
+    let installedScopesMap = {};   // { id: ["local", "user"] } from /api/plugins (ITER_17)
     let marketplaces = [];
     let installPanelOpen = false;
     let selectedMarketplace = null;
@@ -111,8 +118,11 @@
         document.getElementById("project-path-input").value = projectRoot;
         document.getElementById("mock-notice").style.display = data.mock ? "flex" : "none";
         state.local = data.local || [];
-        state.global = data.global || [];
+        state.project = data.project || [];
+        state.user = data.user || [];
+        installedScopesMap = data.installedScopes || {};
         renderPlugins();
+        if (installPanelOpen) renderInstallPanel();
       } catch (err) {
         document.getElementById("loading-spinner").style.display = "none";
         showError(`Failed to load plugins: ${err.message}`);
@@ -137,7 +147,8 @@
       const sections = document.getElementById("plugin-sections");
       const bulk = document.getElementById("bulk-actions");
 
-      if (state.local.length === 0 && state.global.length === 0) {
+      const total = SCOPES.reduce((n, s) => n + state[s].length, 0);
+      if (total === 0) {
         showStatus("No plugins found for this project. Install plugins via Claude Code.");
         sections.style.display = "none";
         bulk.style.display = "none";
@@ -148,19 +159,16 @@
       sections.style.display = "block";
       bulk.style.display = "flex";
 
-      document.getElementById("local-section").style.display =
-        state.local.length ? "block" : "none";
-      document.getElementById("global-section").style.display =
-        state.global.length ? "block" : "none";
-
-      document.getElementById("local-list").innerHTML =
-        state.local.map(localRowHtml).join("");
-      document.getElementById("global-list").innerHTML =
-        state.global.map(globalRowHtml).join("");
+      for (const scope of SCOPES) {
+        document.getElementById(`${scope}-list`).innerHTML =
+          state[scope].length
+            ? state[scope].map((p) => sectionRowHtml(p, scope)).join("")
+            : `<div class="section-empty">No plugins in this scope</div>`;
+      }
 
       document.querySelectorAll(".toggle").forEach((el) => {
         el.addEventListener("change", (e) =>
-          toggle(e.target.dataset.id, e.target.checked, e.target)
+          toggle(e.target.dataset.id, e.target.checked, e.target, e.target.dataset.scope)
         );
       });
     }
@@ -197,125 +205,137 @@
         </div>`;
     }
 
+    function renderHooksDisclosure(hooks) {
+      if (!hooks || hooks.length === 0) return "";
+      const blocks = hooks.map((h) => {
+        const matcher = h.matcher ? `<span class="hook-matcher">matcher: ${esc(h.matcher)}</span>` : "";
+        const actions = (h.actions || []).map((a) =>
+          `<div class="hook-action"><span class="hook-type">${esc(a.type)}</span> — <span class="hook-detail">${esc(a.detail)}</span></div>`
+        ).join("");
+        return `
+          <div class="hook-block">
+            <div class="hook-event">${esc(h.event)} ${matcher}</div>
+            ${actions}
+          </div>`;
+      }).join("");
+      return `
+        <div class="skills-disclosure">
+          <button class="skills-toggle-btn" data-label="hook" data-count="${hooks.length}" onclick="toggleDisclosure(this)">
+            ${hooks.length} hook${hooks.length !== 1 ? "s" : ""} &#9658;
+          </button>
+          <div class="skills-list">${blocks}</div>
+        </div>`;
+    }
+
     function toggleDisclosure(btn) {
       const list = btn.nextElementSibling;
       const open = list.classList.toggle("is-open");
-      const count = list.querySelectorAll(".skill-row").length;
+      const count = btn.dataset.count !== undefined
+        ? btn.dataset.count
+        : list.querySelectorAll(".skill-row").length;
       const label = btn.dataset.label || "skill";
-      btn.textContent = `${count} ${label}${count !== 1 ? "s" : ""} ${open ? "▾" : "▸"}`;
+      btn.textContent = `${count} ${label}${count != 1 ? "s" : ""} ${open ? "▾" : "▸"}`;
     }
 
-    function localRowHtml(p) {
-      const control = p.installed === false
-        ? `<button class="mp-install-btn" onclick="installLocalPlugin('${esc(p.id)}', this)">Install</button>`
-        : `<input type="checkbox" class="toggle" data-id="${esc(p.id)}" ${p.enabled ? "checked" : ""} />`;
+    // Scope-qualified element-id bundles (ITER_13/15/17). ids are built with CSS.escape
+    // on both sides so getElementById matches the literal (escaped) id.
+    function sectionInstallEls(scope, id) {
+      const e = CSS.escape(id);
+      return { btn: `btn-install-${scope}-${e}`, log: `log-${scope}-${e}`, err: `err-${scope}-${e}` };
+    }
+    function sectionUninstallEls(scope, id) {
+      const e = CSS.escape(id);
+      return { btn: `btn-uninstall-${scope}-${e}`, log: `log-${scope}-${e}`, err: `err-${scope}-${e}` };
+    }
+    function mpEls(id) {
+      const e = CSS.escape(id);
+      return { btn: `mp-btn-${e}`, log: `mp-log-${e}`, err: `mp-err-${e}` };
+    }
+    // Read the selected install scope at click time (CSS.escape applied at runtime so it
+    // matches the select's id attribute — never embed the escaped form into an onclick literal).
+    function mpScopeVal(id) {
+      const sel = document.getElementById(`mp-scope-${CSS.escape(id)}`);
+      return sel ? sel.value : "local";
+    }
+
+    function sectionRowHtml(p, scope) {
+      const escId = esc(p.id);
+      const e = CSS.escape(p.id);
+      const installed = p.installed !== false;
+
+      const disclosures = installed
+        ? renderSkillsDisclosure(p.skills) + renderAgentsDisclosure(p.agents) + renderHooksDisclosure(p.hooks)
+        : "";
+
+      const actionBtn = installed
+        ? `<button class="mp-install-btn mp-install-btn--uninstall" id="btn-uninstall-${scope}-${e}"
+                   onclick="uninstallPlugin('${escId}','${scope}', sectionUninstallEls('${scope}','${escId}'))">Uninstall</button>`
+        : `<button class="mp-install-btn" id="btn-install-${scope}-${e}"
+                   onclick="installPlugin('${escId}','${scope}', sectionInstallEls('${scope}','${escId}'))">Install &#8595;</button>`;
+
       return `
-        <div class="plugin-row" data-id="${esc(p.id)}">
-          <div class="plugin-info">
-            <span class="plugin-name">${esc(p.name)}</span>
-            ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
-            ${p.version ? `<span class="version-badge">v${esc(p.version)}</span>` : ""}
-            ${renderSkillsDisclosure(p.skills)}
-            ${renderAgentsDisclosure(p.agents)}
+        <div class="plugin-row" id="row-${scope}-${e}" data-id="${escId}">
+          <div class="plugin-row-main">
+            <div class="plugin-info">
+              <span class="plugin-name">${esc(p.name)}</span>
+              <div class="plugin-badges">
+                ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
+                ${p.version ? `<span class="version-badge">v${esc(p.version)}</span>` : ""}
+                ${!installed ? `<span class="not-installed-tag">Not installed</span>` : ""}
+              </div>
+              ${disclosures}
+            </div>
+            <div class="row-actions">
+              <input type="checkbox" class="toggle" id="toggle-${scope}-${e}"
+                     data-id="${escId}" data-scope="${scope}" ${p.enabled ? "checked" : ""} />
+              ${actionBtn}
+            </div>
           </div>
-          <div class="toggle-wrap">
-            ${control}
-          </div>
+          <div class="mp-install-error" id="err-${scope}-${e}"></div>
+          <div class="mp-install-log" id="log-${scope}-${e}"></div>
         </div>`;
     }
 
-    function globalRowHtml(p) {
-      return `
-        <div class="plugin-row" data-id="${esc(p.id)}">
-          <div class="plugin-info">
-            <span class="plugin-name">${esc(p.name)}</span>
-            ${p.marketplace ? `<span class="marketplace-badge">@${esc(p.marketplace)}</span>` : ""}
-            ${p.version ? `<span class="version-badge">v${esc(p.version)}</span>` : ""}
-            ${renderSkillsDisclosure(p.skills)}
-            ${renderAgentsDisclosure(p.agents)}
-          </div>
-        </div>`;
-    }
-
-    // ---- toggle ----
-    async function toggle(id, enabled, el) {
+    // ---- toggle (scope-aware, ITER_14) ----
+    async function toggle(id, enabled, el, scope) {
       el.disabled = true;
       const prev = !enabled;
-      const p = state.local.find((x) => x.id === id);
+      const p = (state[scope] || []).find((x) => x.id === id);
       if (p) p.enabled = enabled;
+      const errEl = document.getElementById(`err-${scope}-${CSS.escape(id)}`);
+      if (errEl) { errEl.textContent = ""; errEl.classList.remove("visible"); }
       try {
         const res = await fetch("/api/toggle", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, enabled }),
+          body: JSON.stringify({ id, enabled, scope }),
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
       } catch (err) {
         if (p) p.enabled = prev;
         el.checked = prev;
-        showError(`Toggle failed: ${err.message}`);
+        if (errEl) {
+          errEl.textContent = `Toggle failed: ${err.message}`;
+          errEl.classList.add("visible");
+        } else {
+          showError(`Toggle failed: ${err.message}`);
+        }
       } finally {
         el.disabled = false;
       }
     }
 
-    // ---- install local orphan ----
-    async function installLocalPlugin(id, btnEl) {
-      if (btnEl) {
-        btnEl.textContent = "Installing…";
-        btnEl.disabled = true;
-      }
-      try {
-        const res = await fetch("/api/install-stream", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id }),
-        });
-
-        if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error || `HTTP ${res.status}`);
-        }
-
-        const reader  = res.body.getReader();
-        const decoder = new TextDecoder();
-        let   buffer  = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split("\n\n");
-          buffer = parts.pop();
-          for (const part of parts) {
-            const dataLine = part.split("\n").find((l) => l.startsWith("data: "));
-            if (!dataLine) continue;
-            const payload = JSON.parse(dataLine.slice(6));
-            if (payload.type === "done" && !payload.ok) {
-              throw new Error(payload.error || "Install failed");
-            }
-          }
-        }
-
-        await fetchPlugins();
-      } catch (err) {
-        if (btnEl) {
-          btnEl.innerHTML = "Install";
-          btnEl.disabled = false;
-        }
-        showError(`Install failed: ${err.message}`);
-      }
-    }
-
-    // ---- bulk ----
+    // ---- bulk (Local scope only — Project/User are higher blast radius) ----
     async function bulkToggle(enabled) {
       const buttons = document.querySelectorAll(".bulk-actions button");
       buttons.forEach((b) => (b.disabled = true));
       for (const p of state.local) {
-        if (p.installed === false) continue;
         if (p.enabled !== enabled) {
-          const el = document.querySelector(`.toggle[data-id="${esc(p.id)}"]`);
-          if (el) await toggle(p.id, enabled, el);
+          const el = document.getElementById(`toggle-local-${CSS.escape(p.id)}`);
+          if (el) await toggle(p.id, enabled, el, "local");
         }
       }
       buttons.forEach((b) => (b.disabled = false));
@@ -495,62 +515,67 @@
     }
 
     function renderMpPluginRow(p) {
-      const scopeLabel = p.installed
-        ? `<span class="install-status">&#10003; ${esc(p.installedScope)}</span>`
-        : "";
+      const escId = esc(p.id);
+      const e = CSS.escape(p.id);
+      const installedScopes = installedScopesMap[p.id] || [];
+      const notInstalled = SCOPES.filter((s) => !installedScopes.includes(s));
+
+      const tags = installedScopes
+        .map((s) => `<span class="install-status">&#10003; Installed &middot; ${SCOPE_LABELS[s]}</span>`)
+        .join(" ");
 
       const keywords = (p.keywords || [])
         .map((k) => `<span class="mp-keyword">${esc(k)}</span>`)
         .join("");
 
-      const btnLabel   = p.installed ? "Uninstall" : "Install &#8595;";
-      const btnOnclick = p.installed
-        ? `uninstallPlugin('${esc(p.id)}','${esc(p.installedScope)}')`
-        : `installPlugin('${esc(p.id)}')`;
-      const btnClass   = p.installed ? "mp-install-btn mp-install-btn--uninstall" : "mp-install-btn";
+      let installControl = "";
+      if (notInstalled.length > 0) {
+        const opts = notInstalled
+          .map((s, i) => `<option value="${s}" ${i === 0 ? "selected" : ""}>${SCOPE_LABELS[s]}</option>`)
+          .join("");
+        installControl = `
+          <select class="mp-scope-select" id="mp-scope-${e}">${opts}</select>
+          <button class="mp-install-btn" id="mp-btn-${e}"
+                  onclick="installPlugin('${escId}', mpScopeVal('${escId}'), mpEls('${escId}'))">
+            Install &#8595;
+          </button>`;
+      }
 
       return `
-        <div class="mp-plugin-row" id="mp-row-${CSS.escape(p.id)}">
+        <div class="mp-plugin-row" id="mp-row-${e}">
           <div class="mp-plugin-main">
             <span class="mp-plugin-name">${esc(p.name)}</span>
             ${p.version ? `<span class="version-badge">v${esc(p.version)}</span>` : ""}
-            ${scopeLabel}
+            ${tags}
           </div>
-          <div class="mp-install-col">
-            <button class="${btnClass}" id="mp-btn-${CSS.escape(p.id)}" onclick="${btnOnclick}">
-              ${btnLabel}
-            </button>
-          </div>
+          <div class="mp-install-col">${installControl}</div>
           ${p.description ? `<div class="mp-plugin-description">${esc(p.description)}</div>` : ""}
           ${keywords ? `<div class="mp-keyword-list">${keywords}</div>` : ""}
-          <div class="mp-install-error" id="mp-err-${CSS.escape(p.id)}"></div>
-          <div class="mp-install-log" id="mp-log-${CSS.escape(p.id)}"></div>
+          <div class="mp-install-error" id="mp-err-${e}"></div>
+          <div class="mp-install-log" id="mp-log-${e}"></div>
         </div>`;
     }
 
-    // ---- install action ----
-    async function installPlugin(id) {
-      const btn   = document.getElementById(`mp-btn-${CSS.escape(id)}`);
-      const errEl = document.getElementById(`mp-err-${CSS.escape(id)}`);
-      const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
+    // ---- streamed install / uninstall (scope-aware, row-agnostic via els) ----
+    async function _streamOp(endpoint, body, els, labels) {
+      const btn   = els.btn ? document.getElementById(els.btn) : null;
+      const errEl = els.err ? document.getElementById(els.err) : null;
+      const logEl = els.log ? document.getElementById(els.log) : null;
 
       operationInProgress = true;
-      btn.textContent = "Installing…";
-      btn.disabled = true;
-      errEl.textContent = "";
-      errEl.classList.remove("visible");
-      logEl.textContent = "";
-      logEl.classList.add("is-open");
+      if (btn)   { btn.textContent = labels.progress; btn.disabled = true; }
+      if (errEl) { errEl.textContent = ""; errEl.classList.remove("visible"); }
+      if (logEl) { logEl.textContent = ""; logEl.classList.add("is-open"); }
 
       try {
-        const res = await fetch("/api/install-stream", {
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id }),
+          body: JSON.stringify(body),
         });
 
         if (!res.ok) {
-          const data = await res.json();
+          const data = await res.json().catch(() => ({}));
           throw new Error(data.error || `HTTP ${res.status}`);
         }
 
@@ -573,14 +598,10 @@
             const payload = JSON.parse(dataLine.slice(6));
 
             if (payload.type === "line") {
-              logEl.textContent += payload.text;
-              logEl.scrollTop = logEl.scrollHeight;
+              if (logEl) { logEl.textContent += payload.text; logEl.scrollTop = logEl.scrollHeight; }
             } else if (payload.type === "done") {
-              if (payload.ok) {
-                success = true;
-              } else {
-                throw new Error(payload.error || "Install failed");
-              }
+              if (payload.ok) success = true;
+              else throw new Error(payload.error || labels.failed);
               break outer;
             }
           }
@@ -590,96 +611,25 @@
         if (success) {
           await new Promise((r) => setTimeout(r, 3000));
           operationInProgress = false;
-          const liveLog = document.getElementById(`mp-log-${CSS.escape(id)}`);
-          if (liveLog) liveLog.classList.remove("is-open");
+          if (logEl) logEl.classList.remove("is-open");
           await Promise.all([fetchPlugins(), fetchMarketplace()]);
         }
-
       } catch (err) {
         operationInProgress = false;
-        btn.innerHTML = "Install &#8595;";
-        btn.disabled = false;
-        logEl.classList.remove("is-open");
-        errEl.textContent = `Install failed: ${err.message}`;
-        errEl.classList.add("visible");
+        if (btn)   { btn.innerHTML = labels.idle; btn.disabled = false; }
+        if (logEl) logEl.classList.remove("is-open");
+        if (errEl) { errEl.textContent = `${labels.failed}: ${err.message}`; errEl.classList.add("visible"); }
       }
     }
 
-    // ---- uninstall action ----
-    async function uninstallPlugin(id, scope) {
-      const btn   = document.getElementById(`mp-btn-${CSS.escape(id)}`);
-      const errEl = document.getElementById(`mp-err-${CSS.escape(id)}`);
-      const logEl = document.getElementById(`mp-log-${CSS.escape(id)}`);
+    function installPlugin(id, scope, els) {
+      return _streamOp("/api/install-stream", { id, scope }, els,
+        { progress: "Installing…", idle: "Install &#8595;", failed: "Install failed" });
+    }
 
-      operationInProgress = true;
-      btn.textContent = "Uninstalling…";
-      btn.disabled = true;
-      errEl.textContent = "";
-      errEl.classList.remove("visible");
-      logEl.textContent = "";
-      logEl.classList.add("is-open");
-
-      try {
-        const res = await fetch("/api/uninstall-stream", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, scope }),
-        });
-
-        if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error || `HTTP ${res.status}`);
-        }
-
-        const reader  = res.body.getReader();
-        const decoder = new TextDecoder();
-        let   buffer  = "";
-        let   success = false;
-
-        outer: while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split("\n\n");
-          buffer = parts.pop();
-
-          for (const part of parts) {
-            const dataLine = part.split("\n").find((l) => l.startsWith("data: "));
-            if (!dataLine) continue;
-            const payload = JSON.parse(dataLine.slice(6));
-
-            if (payload.type === "line") {
-              logEl.textContent += payload.text;
-              logEl.scrollTop = logEl.scrollHeight;
-            } else if (payload.type === "done") {
-              if (payload.ok) {
-                success = true;
-              } else {
-                throw new Error(payload.error || "Uninstall failed");
-              }
-              break outer;
-            }
-          }
-        }
-        reader.cancel().catch(() => {});
-
-        if (success) {
-          await new Promise((r) => setTimeout(r, 3000));
-          operationInProgress = false;
-          const liveLog = document.getElementById(`mp-log-${CSS.escape(id)}`);
-          if (liveLog) liveLog.classList.remove("is-open");
-          await Promise.all([fetchPlugins(), fetchMarketplace()]);
-        }
-
-      } catch (err) {
-        operationInProgress = false;
-        btn.textContent = "Uninstall";
-        btn.disabled = false;
-        logEl.classList.remove("is-open");
-        errEl.textContent = `Uninstall failed: ${err.message}`;
-        errEl.classList.add("visible");
-      }
+    function uninstallPlugin(id, scope, els) {
+      return _streamOp("/api/uninstall-stream", { id, scope }, els,
+        { progress: "Uninstalling…", idle: "Uninstall", failed: "Uninstall failed" });
     }
 
     // ---- SSE event stream (ITER_06) ----
