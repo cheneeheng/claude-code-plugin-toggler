@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-07
+
+### Changed
+- Tidewater visual redesign (ITER_18): replaced the flat blue-accent palette with a teal/terracotta complementary system — teal drives all interactive controls, terracotta marks the enabled-row state, the logo mark, and the mock notice. Adds depth (shadows/radii), web fonts (Fraunces / Hanken Grotesk / JetBrains Mono in the HTML surface), a `rise` entrance animation, and a static logo mark. The VSCode surface uses a hybrid bridge — neutrals derive from `--vscode-*`, brand colours hardcoded — and keeps editor fonts (CSP). No data-model, endpoint, or webview-message logic changes (d5791fb)
+
 ## [0.7.0] - 2026-06-07
 
 ### Added
