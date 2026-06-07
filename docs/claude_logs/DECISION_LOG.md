@@ -293,3 +293,29 @@
 **Impact / Risk:** Tests are CI-oriented (fresh runner home). Locally they still overwrite then delete `~/.claude/plugins/installed_plugins.json` (pre-existing destructive cleanup) — flagged to the user; not auto-fixed. Streaming endpoints remain unverified by smoke tests.
 
 **Outcome:** `bash -n` and PowerShell parser both pass; not executed locally to avoid clobbering the real plugin registry.
+
+---
+
+### Entry — ITER_18 mock-notice retint
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-06-07T00:00:00Z
+**Task:** ITER_18 §05 — `.mock-notice` retint
+
+**Context:** §05 says retint `.mock-notice` to the teal/terracotta neutrals and "keep its data-theme / data-context triad." The original triad existed because the colours were hardcoded hex per context. The redesign is token-driven.
+**Decision:** Retinted `.mock-notice` to the terracotta brand family using `var(--accent-wash)`/`var(--accent-hi)`/`var(--accent)`, which auto-adapt across light/dark/vscode from a single rule. Collapsed the former three-block triad to one block (kept one small `:root[data-context="vscode"]` override forcing readable `--fg` text). This honours "retint to teal/terracotta neutrals" while avoiding redundant per-context blocks that tokens make unnecessary.
+**Impact / Risk:** Behaviour change for the VSCode mock notice — it now reads as the terracotta brand rather than deferring to `--vscode-inputValidation-warning*`. Consistent with the redesign intent.
+
+---
+
+### Entry — ITER_18 rise animation target
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-06-07T00:00:00Z
+**Task:** ITER_18 §05 — `@keyframes rise` application
+
+**Context:** §05 specifies the `rise` entrance animation on "header/card/rows" AND a row hover-lift (`transform: translateY(-2px)`). A persistent animation with `fill: both` pins the animated `transform` in the cascade, which would defeat the hover-lift `transform` on the same `.plugin-row`.
+**Decision:** Applied `rise` to `header`, `.project-card`, and the three section containers (`#local-section/#project-section/#user-section`) with a staggered `animation-delay` — not to individual `.plugin-row` elements. Rows rise visually with their section while keeping a working hover-lift.
+**Impact / Risk:** Rows do not individually stagger; they fade in as a section group. Hover-lift preserved. No functional risk.
