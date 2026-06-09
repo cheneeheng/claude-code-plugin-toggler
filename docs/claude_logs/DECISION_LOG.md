@@ -355,3 +355,26 @@
 **Decision:** Removed the inter-row gap and the full border (kept only border-bottom); with gaps/cards, hairline dividers would not read as a list. Also took the §05 mono-element rule literally for .marketplace-badge (11px, color fg-muted) while leaving its teal border/wash, since only "color" is named.
 **Impact / Risk:** Marketplace badge now has muted text inside a teal-bordered chip; flag for visual QA.
 **Outcome:** Dense list renders with dividers; enabled wash + edge unaffected.
+
+### Entry 018
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-06-09T00:00:00+08:00
+**Task:** ITER_19 review — `.skills-toggle-btn:hover` listed as a `--secondary-hi` consumer
+
+**Context:** The §02 token table says `--secondary-hi` is "the flat hover fill for filled controls (`.mp-install-btn:hover`, `.bulk-install-btn:hover`, `.skills-toggle-btn:hover`)". But `.skills-toggle-btn` is not a filled control — it is a borderless text-link button (`background: none`) and had no hover rule in the implemented ITER_18 file. §05's operative instruction only says to *re-point existing* gradient/`-glow` filled-button hovers, of which there were two.
+**Decision:** No CSS change. The §02 parenthetical is drafting drift (it assumes the button is filled); inventing a `--secondary-hi` fill hover for a text-link button would be a visual change §05 never specifies.
+**Impact / Risk:** None — matches ITER_18 behaviour. If a hover affordance is wanted on the disclosure button, it should be specified in a future iteration.
+
+### Entry 019
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-06-10T00:00:00+08:00
+**Task:** Extract brand-mark SVG to a file; reference it in both surfaces
+
+**Context:** Request 2 asked to add the logo next to the webview title "like the HTML version", but panel.html already had the identical inline mark (f1b94e8). Also had to pick a reference mechanism that keeps the mark theme-reactive: <img> freezes colours because CSS custom properties do not resolve inside an image document.
+**Decision:** Interpreted request 2 as "source the mark from the SVG file". HTML surface: external <use href="/icon.svg#mark"> (same-origin, page vars cascade into the use shadow tree) + new /icon.svg route. Webview: external <use> is cross-origin-blocked, so extension.js inlines webview/icon.svg via an __ICON_SVG__ placeholder. icon.svg fills use var(--x, fallback) so the same file doubles as the favicon.
+**Impact / Risk:** Two copies of icon.svg (html/ and vscode-extension/webview/) with no sync step, unlike styles.css. External <use> requires a modern browser (all evergreen browsers OK).
+**Outcome:** Pending user verification in browser and Extension Development Host.

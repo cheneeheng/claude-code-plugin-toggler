@@ -659,9 +659,16 @@ class SkillsViewProvider {
       "webview",
       "panel.html"
     );
+    const iconSvgPath = vscode.Uri.joinPath(
+      this._extensionUri,
+      "webview",
+      "icon.svg"
+    );
+    const iconSvg = fs.readFileSync(iconSvgPath.fsPath, "utf8").trim();
     let html = fs.readFileSync(panelHtmlPath.fsPath, "utf8");
     html = html.replace("__STYLES_URI__", stylesUri.toString());
     html = html.replace(/__JS_BASE__/g, jsBaseUri.toString());
+    html = html.replace("__ICON_SVG__", iconSvg);
     return html;
   }
 }

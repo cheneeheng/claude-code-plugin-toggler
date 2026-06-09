@@ -479,6 +479,9 @@ class RequestHandler(BaseHTTPRequestHandler):
         elif self.path == "/styles.css":
             self._serve_file("styles.css", "text/css")
 
+        elif self.path == "/icon.svg":
+            self._serve_file("icon.svg", "image/svg+xml")
+
         elif self.path.startswith("/js/") and self.path.endswith(".js"):
             # Basename only — flattens any traversal attempt; js/ is a flat directory.
             self._serve_file(f"js/{self.path.rsplit('/', 1)[-1]}", "text/javascript")

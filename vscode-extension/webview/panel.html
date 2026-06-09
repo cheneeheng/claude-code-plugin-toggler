@@ -13,14 +13,10 @@
 </head>
 <body>
   <header>
-    <h1><span class="mark" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="18" height="18" fill="none">
-      <rect x="2" y="3"  width="12" height="2" rx="1" fill="var(--border-strong)"/>
-      <rect x="2" y="7"  width="12" height="2" rx="1" fill="var(--border-strong)"/>
-      <rect x="2" y="11" width="12" height="2" rx="1" fill="var(--border-strong)"/>
-      <circle cx="12" cy="4"  r="2" fill="var(--accent)"/>
-      <circle cx="5"  cy="8"  r="2" fill="var(--secondary)"/>
-      <circle cx="10" cy="12" r="2" fill="var(--secondary)"/>
-    </svg></span>Skills Toggle</h1>
+    <!-- __ICON_SVG__ is replaced by extension.js with the contents of webview/icon.svg;
+         inlining keeps the mark coloured by the VSCode theme vars (an <img> or external
+         <use> cannot resolve page CSS vars in a webview). -->
+    <h1><span class="mark" aria-hidden="true">__ICON_SVG__</span>Skills Toggle</h1>
   </header>
 
   <div class="project-card" id="project-card">
