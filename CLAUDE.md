@@ -22,11 +22,11 @@ cd vscode-extension && vsce package
 ```
 `prepackage` hook auto-runs CSS sync; no manual step needed before packaging.
 
-**CSS sync** — `html/styles.css` is canonical. After any edit to it:
+**CSS/icon sync** — `html/styles.css` and `html/icon.svg` are canonical. After any edit to either:
 ```bash
 make sync-css   # or: powershell scripts/sync-css.ps1
 ```
-Do not edit `vscode-extension/webview/styles.css` directly — it is overwritten by this command.
+Do not edit `vscode-extension/webview/styles.css` or `vscode-extension/webview/icon.svg` directly — they are overwritten by this command. (`vscode-extension/icon.svg` at the extension root is separate: the monochrome activity-bar icon referenced by `package.json`.)
 
 ## Architecture
 

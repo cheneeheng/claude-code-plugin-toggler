@@ -319,3 +319,62 @@
 **Context:** §05 specifies the `rise` entrance animation on "header/card/rows" AND a row hover-lift (`transform: translateY(-2px)`). A persistent animation with `fill: both` pins the animated `transform` in the cascade, which would defeat the hover-lift `transform` on the same `.plugin-row`.
 **Decision:** Applied `rise` to `header`, `.project-card`, and the three section containers (`#local-section/#project-section/#user-section`) with a staggered `animation-delay` — not to individual `.plugin-row` elements. Rows rise visually with their section while keeping a working hover-lift.
 **Impact / Risk:** Rows do not individually stagger; they fade in as a section group. Hover-lift preserved. No functional risk.
+
+### Entry 015
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-06-09T00:00:00+08:00
+**Task:** ITER_19 — JS extraction scope ("move the script out into smaller js files")
+
+**Context:** The user asked to extract the inline script "for the html files". Two HTML files exist: html/index.html and vscode-extension/webview/panel.html. Extracting panel.html's script requires extension.js changes (webview URI substitution), which ITER_19 explicitly freezes ("extension.js unchanged").
+**Decision:** Extracted html/index.html only, into eight classic scripts under html/js/ plus a path-safe /js/*.js route in server.py. panel.html's script left inline.
+**Impact / Risk:** If the user also meant the webview, a follow-up touching extension.js is needed.
+**Outcome:** html/ surface now serves js/state.js, helpers.js, theme.js, render.js, install-panel.js, api.js, events.js, main.js in order.
+
+### Entry 016
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-06-09T00:00:00+08:00
+**Task:** ITER_19 §04 — marketplace icon vs pre-existing package.json "icon" field
+
+**Context:** The plan says the "icon" field is "added", but package.json already had "icon": "icon.png" with a committed root icon.png (from ITER_08).
+**Decision:** Followed the ITER_19 spec: generated vscode-extension/media/icon.png per the asset spec, re-pointed the field to media/icon.png, and deleted the superseded root icon.png (recoverable from git history).
+**Impact / Risk:** None expected; .vscodeignore does not exclude media/ (R5 verified).
+**Outcome:** New 128x128 brand-tile icon committed in media/.
+
+### Entry 017
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-06-09T00:00:00+08:00
+**Task:** ITER_19 §05 — dense-list details the spec left implicit
+
+**Context:** The spec converts .plugin-row from cards to "flat list items separated by hairline dividers" but does not mention the .plugin-list gap (0.4rem) or the row's full border.
+**Decision:** Removed the inter-row gap and the full border (kept only border-bottom); with gaps/cards, hairline dividers would not read as a list. Also took the §05 mono-element rule literally for .marketplace-badge (11px, color fg-muted) while leaving its teal border/wash, since only "color" is named.
+**Impact / Risk:** Marketplace badge now has muted text inside a teal-bordered chip; flag for visual QA.
+**Outcome:** Dense list renders with dividers; enabled wash + edge unaffected.
+
+### Entry 018
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-06-09T00:00:00+08:00
+**Task:** ITER_19 review — `.skills-toggle-btn:hover` listed as a `--secondary-hi` consumer
+
+**Context:** The §02 token table says `--secondary-hi` is "the flat hover fill for filled controls (`.mp-install-btn:hover`, `.bulk-install-btn:hover`, `.skills-toggle-btn:hover`)". But `.skills-toggle-btn` is not a filled control — it is a borderless text-link button (`background: none`) and had no hover rule in the implemented ITER_18 file. §05's operative instruction only says to *re-point existing* gradient/`-glow` filled-button hovers, of which there were two.
+**Decision:** No CSS change. The §02 parenthetical is drafting drift (it assumes the button is filled); inventing a `--secondary-hi` fill hover for a text-link button would be a visual change §05 never specifies.
+**Impact / Risk:** None — matches ITER_18 behaviour. If a hover affordance is wanted on the disclosure button, it should be specified in a future iteration.
+
+### Entry 019
+
+**Type:** Decision
+**Mode:** Autonomous
+**Timestamp:** 2026-06-10T00:00:00+08:00
+**Task:** Extract brand-mark SVG to a file; reference it in both surfaces
+
+**Context:** Request 2 asked to add the logo next to the webview title "like the HTML version", but panel.html already had the identical inline mark (f1b94e8). Also had to pick a reference mechanism that keeps the mark theme-reactive: <img> freezes colours because CSS custom properties do not resolve inside an image document.
+**Decision:** Interpreted request 2 as "source the mark from the SVG file". HTML surface: external <use href="/icon.svg#mark"> (same-origin, page vars cascade into the use shadow tree) + new /icon.svg route. Webview: external <use> is cross-origin-blocked, so extension.js inlines webview/icon.svg via an __ICON_SVG__ placeholder. icon.svg fills use var(--x, fallback) so the same file doubles as the favicon.
+**Impact / Risk:** Two copies of icon.svg (html/ and vscode-extension/webview/) with no sync step, unlike styles.css. External <use> requires a modern browser (all evergreen browsers OK).
+**Outcome:** Pending user verification in browser and Extension Development Host.

@@ -1,21 +1,22 @@
-/* --- Tidewater theme (ITER_18) --- */
+/* --- Tidewater theme (ITER_18, refined ITER_19) --- */
 
-/* Foundation fonts (HTML); VSCode overrides these in the bridge.
-   Base :root also carries the light-fallback palette (mirrors [data-theme="light"]). */
+/* Foundation fonts + radius hierarchy (theme-independent); VSCode overrides the
+   fonts in the bridge. Base :root also carries the light-fallback palette
+   (mirrors [data-theme="light"]). */
 :root {
   --font-ui:      "Hanken Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-display: "Fraunces", Georgia, serif;
   --font-mono:    "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
 
+  --radius-lg: 10px; --radius-md: 6px; --radius-sm: 4px;
+
   --bg:#F0F5F3; --surface:#FFFFFF; --surface-2:#F3F8F6;
   --fg:#143230; --fg-muted:#5F7E7A; --border:#DCEAE6; --border-strong:#C7DBD6;
   --inherited-fg:#7A938E; --inherited-bg:#E9F0EE;
-  --accent:#CB6442; --accent-hi:#E27A50; --accent-wash:#FAEDE6; --accent-glow:rgba(203,100,66,.28);
-  --secondary:#0E7E77; --secondary-hi:#14938C; --secondary-wash:#E2F1EF; --secondary-glow:rgba(14,126,119,.28);
+  --accent:#CB6442; --accent-wash:#FAEDE6;
+  --secondary:#0E7E77; --secondary-hi:#14938C; --secondary-wash:#E2F1EF;
   --on-text:#fff;
   --shadow-sm:0 1px 2px rgba(15,50,48,.06),0 1px 3px rgba(15,50,48,.05);
-  --shadow-md:0 2px 4px rgba(15,50,48,.06),0 8px 24px rgba(15,50,48,.08);
-  --shadow-lift:0 4px 10px rgba(15,50,48,.10),0 14px 40px rgba(15,50,48,.12);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,12 +24,10 @@
     --bg:#0C1F1D; --surface:#122A27; --surface-2:#163230;
     --fg:#E7F1EE; --fg-muted:#7C9590; --border:#203F3A; --border-strong:#2D544D;
     --inherited-fg:#6E8782; --inherited-bg:#15302D;
-    --accent:#E98A62; --accent-hi:#F4A37D; --accent-wash:rgba(233,138,98,.11); --accent-glow:rgba(233,138,98,.34);
-    --secondary:#2FB3A8; --secondary-hi:#45C7BC; --secondary-wash:rgba(47,179,168,.12); --secondary-glow:rgba(47,179,168,.34);
+    --accent:#E98A62; --accent-wash:rgba(233,138,98,.11);
+    --secondary:#2FB3A8; --secondary-hi:#45C7BC; --secondary-wash:rgba(47,179,168,.12);
     --on-text:#06201e;
     --shadow-sm:0 1px 2px rgba(0,0,0,.45);
-    --shadow-md:0 2px 6px rgba(0,0,0,.45),0 10px 30px rgba(0,0,0,.5);
-    --shadow-lift:0 6px 16px rgba(0,0,0,.55),0 18px 50px rgba(0,0,0,.6);
   }
 }
 
@@ -37,24 +36,20 @@
   --bg:#F0F5F3; --surface:#FFFFFF; --surface-2:#F3F8F6;
   --fg:#143230; --fg-muted:#5F7E7A; --border:#DCEAE6; --border-strong:#C7DBD6;
   --inherited-fg:#7A938E; --inherited-bg:#E9F0EE;
-  --accent:#CB6442; --accent-hi:#E27A50; --accent-wash:#FAEDE6; --accent-glow:rgba(203,100,66,.28);
-  --secondary:#0E7E77; --secondary-hi:#14938C; --secondary-wash:#E2F1EF; --secondary-glow:rgba(14,126,119,.28);
+  --accent:#CB6442; --accent-wash:#FAEDE6;
+  --secondary:#0E7E77; --secondary-hi:#14938C; --secondary-wash:#E2F1EF;
   --on-text:#fff;
   --shadow-sm:0 1px 2px rgba(15,50,48,.06),0 1px 3px rgba(15,50,48,.05);
-  --shadow-md:0 2px 4px rgba(15,50,48,.06),0 8px 24px rgba(15,50,48,.08);
-  --shadow-lift:0 4px 10px rgba(15,50,48,.10),0 14px 40px rgba(15,50,48,.12);
 }
 
 :root[data-theme="dark"] {
   --bg:#0C1F1D; --surface:#122A27; --surface-2:#163230;
   --fg:#E7F1EE; --fg-muted:#7C9590; --border:#203F3A; --border-strong:#2D544D;
   --inherited-fg:#6E8782; --inherited-bg:#15302D;
-  --accent:#E98A62; --accent-hi:#F4A37D; --accent-wash:rgba(233,138,98,.11); --accent-glow:rgba(233,138,98,.34);
-  --secondary:#2FB3A8; --secondary-hi:#45C7BC; --secondary-wash:rgba(47,179,168,.12); --secondary-glow:rgba(47,179,168,.34);
+  --accent:#E98A62; --accent-wash:rgba(233,138,98,.11);
+  --secondary:#2FB3A8; --secondary-hi:#45C7BC; --secondary-wash:rgba(47,179,168,.12);
   --on-text:#06201e;
   --shadow-sm:0 1px 2px rgba(0,0,0,.45);
-  --shadow-md:0 2px 6px rgba(0,0,0,.45),0 10px 30px rgba(0,0,0,.5);
-  --shadow-lift:0 6px 16px rgba(0,0,0,.55),0 18px 50px rgba(0,0,0,.6);
 }
 
 /* --- VSCode hybrid bridge: neutrals follow the editor, brand hardcoded --- */
@@ -70,8 +65,8 @@
   --inherited-bg:  var(--vscode-input-background, var(--vscode-sideBar-background));
 
   /* brand hardcoded — default = dark-editor shades */
-  --accent:#E98A62; --accent-hi:#F4A37D; --accent-wash:rgba(233,138,98,.12); --accent-glow:rgba(233,138,98,.30);
-  --secondary:#2FB3A8; --secondary-hi:#45C7BC; --secondary-wash:rgba(47,179,168,.14); --secondary-glow:rgba(47,179,168,.30);
+  --accent:#E98A62; --accent-wash:rgba(233,138,98,.12);
+  --secondary:#2FB3A8; --secondary-hi:#45C7BC; --secondary-wash:rgba(47,179,168,.14);
   --on-text:#06201e;
 
   /* native fonts — no remote load (CSP) */
@@ -81,24 +76,22 @@
 
   /* subtle, border-led depth */
   --shadow-sm:0 1px 2px rgba(0,0,0,.25);
-  --shadow-md:0 2px 8px rgba(0,0,0,.28);
-  --shadow-lift:0 6px 18px rgba(0,0,0,.32);
 }
 
 /* light editors → use the darker (light-mode) brand shades for contrast */
 body.vscode-light {
-  --accent:#CB6442; --accent-hi:#E27A50; --accent-wash:rgba(203,100,66,.12); --accent-glow:rgba(203,100,66,.28);
-  --secondary:#0E7E77; --secondary-hi:#14938C; --secondary-wash:rgba(14,126,119,.12); --secondary-glow:rgba(14,126,119,.28);
+  --accent:#CB6442; --accent-wash:rgba(203,100,66,.12);
+  --secondary:#0E7E77; --secondary-hi:#14938C; --secondary-wash:rgba(14,126,119,.12);
   --on-text:#fff;
 }
 
-/* high-contrast themes → defer to the theme's own accent, drop tints/glows */
+/* high-contrast themes → defer to the theme's own accent, drop tints */
 body.vscode-high-contrast {
   --secondary: var(--vscode-textLink-foreground);
   --secondary-hi: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
   --accent: var(--vscode-textLink-foreground);
-  --secondary-wash: transparent; --secondary-glow: transparent;
-  --accent-wash: transparent;    --accent-glow: transparent;
+  --secondary-wash: transparent;
+  --accent-wash: transparent;
 }
 
 /* --- Reset --- */
@@ -113,32 +106,6 @@ body {
   position: relative;
 }
 
-/* --- Atmosphere (HTML only; disabled in the VSCode bridge below) --- */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -2;
-  pointer-events: none;
-  background:
-    radial-gradient(60% 50% at 100% 0%, var(--secondary-wash), transparent 70%),
-    radial-gradient(55% 45% at 0% 100%, var(--accent-wash), transparent 70%);
-}
-
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.025;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-/* no ambient glow/grain in the sidebar */
-:root[data-context="vscode"] body::before,
-:root[data-context="vscode"] body::after { display: none; }
-
 header { margin-bottom: 1.25rem; }
 
 h1 {
@@ -146,20 +113,21 @@ h1 {
   align-items: center;
   gap: 0.45rem;
   font-family: var(--font-display);
+  font-optical-sizing: auto;
   font-size: 1.25rem;
   font-weight: 600;
   color: var(--fg);
 }
 
 .project-path {
-  font-size: 0.72rem;
+  font-size: 11px;
   color: var(--fg-muted);
   margin-top: 0.2rem;
   font-family: var(--font-mono);
   word-break: break-all;
 }
 
-/* --- Logo mark (ITER_18; static element added to both headers) --- */
+/* --- Logo mark (ITER_19: two-tone inline SVG, self-coloured) --- */
 .mark {
   display: inline-flex;
   align-items: center;
@@ -167,13 +135,6 @@ h1 {
   width: 22px;
   height: 22px;
   flex-shrink: 0;
-  border-radius: 7px;
-  background: linear-gradient(140deg, var(--accent-hi), var(--accent));
-  color: var(--on-text);
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  font-weight: 700;
-  line-height: 1;
 }
 
 /* --- Header layout (HTML only) --- */
@@ -195,7 +156,7 @@ h1 {
   background: var(--surface);
   color: var(--fg-muted);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   padding: 0.2rem 0.6rem;
   font-size: 0.72rem;
   cursor: pointer;
@@ -210,13 +171,12 @@ h1 {
   background: var(--surface);
   border: 1px solid var(--border);
   border-left: 3px solid var(--secondary);
-  border-radius: 14px;
-  padding: 10px 14px;
+  border-radius: var(--radius-lg);
+  padding: 12px;
   margin-bottom: 16px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  box-shadow: var(--shadow-sm);
 }
 
 .project-card-row {
@@ -227,23 +187,23 @@ h1 {
 
 .project-label {
   font-size: 0.65rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--secondary);
 }
 
 .project-name {
-  font-family: var(--font-display);
+  font-family: var(--font-ui);
   font-size: 0.95rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--fg);
 }
 
 .project-change-btn {
   background: none;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   color: var(--fg-muted);
   cursor: pointer;
   font-size: 0.72rem;
@@ -299,12 +259,13 @@ h1 {
 
 /* --- Version badge --- */
 .version-badge {
-  font-size: 0.68rem;
+  font-size: 11px;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   color: var(--fg-muted);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 0.08rem 0.35rem;
 }
 
@@ -314,8 +275,8 @@ h1 {
 .mock-notice {
   font-size: 0.78rem;
   background: var(--accent-wash);
-  border: 1px solid var(--accent-hi);
-  border-radius: 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
   padding: 6px 10px;
   margin-bottom: 12px;
   color: var(--accent);
@@ -334,11 +295,12 @@ h1 {
 
 /* --- Section headings --- */
 .section-title {
-  font-size: 0.7rem;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
   margin-bottom: 0.2rem;
   margin-top: 0.9rem;
 }
@@ -351,11 +313,10 @@ h1 {
   margin-bottom: 0.4rem;
 }
 
-/* --- Plugin list --- */
+/* --- Plugin list (ITER_19: flat dense list, hairline dividers) --- */
 .plugin-list {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
   margin-bottom: 1rem;
 }
 
@@ -364,23 +325,21 @@ h1 {
   display: flex;
   flex-direction: column;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 10px;
   gap: 0.4rem;
-  box-shadow: var(--shadow-sm);
   overflow: hidden;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: background 130ms ease-out;
 }
 
-.plugin-row:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lift);
-}
+.plugin-row:last-child { border-bottom: none; }
 
-/* Enabled row → terracotta wash + left edge, driven by :has() (no JS class). */
+.plugin-row:hover { background: var(--surface-2); }
+
+/* Enabled row → terracotta wash + solid left edge, driven by :has() (no JS class).
+   Wins over :hover by specificity — do not add a combined selector. */
 .plugin-row:has(.toggle:checked) {
-  background: linear-gradient(100deg, var(--accent-wash), var(--surface) 60%);
+  background: var(--accent-wash);
 }
 
 .plugin-row:has(.toggle:checked)::before {
@@ -390,7 +349,7 @@ h1 {
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(var(--accent-hi), var(--accent));
+  background: var(--accent);
 }
 
 /* Top line of a plugin row: info on the left, toggle + install/uninstall on the right */
@@ -433,11 +392,11 @@ h1 {
 .plugin-row.inherited .plugin-name { color: var(--inherited-fg); }
 
 .marketplace-badge {
-  font-size: 0.68rem;
-  color: var(--secondary);
+  font-size: 11px;
+  color: var(--fg-muted);
   background: var(--secondary-wash);
   border: 1px solid var(--secondary);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 0.08rem 0.35rem;
   font-family: var(--font-mono);
   white-space: nowrap;
@@ -459,7 +418,7 @@ h1 {
   color: var(--fg-muted);
   background: var(--bg);
   border: 1px dashed var(--border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 0.08rem 0.35rem;
   white-space: nowrap;
 }
@@ -493,11 +452,15 @@ h1 {
 }
 
 .toggle:checked {
-  background: linear-gradient(140deg, var(--secondary-hi), var(--secondary));
-  box-shadow: 0 0 0 4px var(--secondary-glow);
+  background: var(--secondary);
 }
 .toggle:checked::after { left: 18px; }
 .toggle:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.toggle:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+}
 
 /* --- Override button (inherited rows) --- */
 .override-btn {
@@ -529,7 +492,7 @@ button {
   background: var(--surface);
   color: var(--fg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   padding: 0.35rem 0.8rem;
   font-size: 0.8rem;
   cursor: pointer;
@@ -563,7 +526,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   color: var(--secondary);
   cursor: pointer;
   font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
   padding: 0;
+  border-radius: var(--radius-md);
 }
 
 /* ITER_05: max-height transition replaces display:none/block for smooth expand/collapse */
@@ -676,16 +641,16 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   filter: brightness(1.3);
 }
 
-/* --- Install panel (ITER_04) --- */
+/* --- Install panel (ITER_04; ITER_19: the only shadowed element) --- */
 .install-panel {
   display: none;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   padding: 12px 14px;
   margin-top: 12px;
   background: var(--surface);
   overflow: hidden;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .install-panel.is-open {
@@ -700,9 +665,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 
 .install-panel-title {
-  font-family: var(--font-display);
+  font-family: var(--font-ui);
   font-size: 0.85rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--fg);
 }
 
@@ -810,7 +775,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   font-size: 0.65rem;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 1px 5px;
   color: var(--fg-muted);
 }
@@ -837,7 +802,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .mp-install-btn {
   font-size: 0.75rem;
   padding: 3px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   white-space: nowrap;
   border: 1px solid var(--secondary);
@@ -846,7 +811,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 
 .mp-install-btn:hover:not(:disabled) {
-  background: var(--secondary);
+  background: var(--secondary-hi);
   color: var(--on-text);
 }
 
@@ -905,7 +870,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .marketplace-refresh-btn {
   font-size: 0.72rem;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: transparent;
   color: var(--fg-muted);
@@ -944,7 +909,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .bulk-install-btn {
   font-size: 0.78rem;
   padding: 4px 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--secondary);
   background: transparent;
   color: var(--secondary);
@@ -952,32 +917,12 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 
 .bulk-install-btn:hover {
-  background: var(--secondary);
+  background: var(--secondary-hi);
   color: var(--on-text);
 }
 
-/* --- Motion (ITER_18): entrance rise with a small stagger --- */
-@keyframes rise {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* Applied to header/card/section containers (not individual .plugin-row): a
-   persistent rise with fill `both` would pin the row transform and defeat the
-   hover-lift, so rows rise with their section instead. */
-header,
-.project-card,
-#local-section,
-#project-section,
-#user-section {
-  animation: rise 0.4s ease both;
-}
-
-.project-card    { animation-delay: 0.04s; }
-#local-section   { animation-delay: 0.08s; }
-#project-section { animation-delay: 0.12s; }
-#user-section    { animation-delay: 0.16s; }
-
+/* ITER_19: no entrance choreography — the only animated things are user-caused
+   state changes (toggle thumb, disclosure expand/collapse, hover/focus colour). */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

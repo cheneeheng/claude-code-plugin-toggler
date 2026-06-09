@@ -9,7 +9,7 @@
     "url": "https://github.com/cheneeheng/skills-toggle"
   },
   "license": "MIT",
-  "icon": "icon.png",
+  "icon": "media/icon.png",
   "engines": { "vscode": "^1.80.0", "node": ">=20" },
   "categories": ["Other"],
   "keywords": ["claude", "plugins", "skills", "claude code"],
