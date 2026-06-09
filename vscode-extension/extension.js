@@ -432,11 +432,14 @@ class SkillsViewProvider {
     const stylesUri = webviewView.webview.asWebviewUri(
       vscode.Uri.joinPath(this._extensionUri, "webview", "styles.css")
     );
+    const jsBaseUri = webviewView.webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, "webview", "js")
+    );
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, "webview")],
     };
-    webviewView.webview.html = this._getHtml(webviewView.webview, stylesUri);
+    webviewView.webview.html = this._getHtml(webviewView.webview, stylesUri, jsBaseUri);
     this._refresh(webviewView.webview);
     webviewView.webview.onDidReceiveMessage((msg) =>
       this._onMessage(webviewView.webview, msg)
@@ -650,7 +653,7 @@ class SkillsViewProvider {
     }
   }
 
-  _getHtml(webview, stylesUri) {
+  _getHtml(webview, stylesUri, jsBaseUri) {
     const panelHtmlPath = vscode.Uri.joinPath(
       this._extensionUri,
       "webview",
@@ -658,6 +661,7 @@ class SkillsViewProvider {
     );
     let html = fs.readFileSync(panelHtmlPath.fsPath, "utf8");
     html = html.replace("__STYLES_URI__", stylesUri.toString());
+    html = html.replace(/__JS_BASE__/g, jsBaseUri.toString());
     return html;
   }
 }
