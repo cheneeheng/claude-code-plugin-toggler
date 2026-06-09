@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-10
+
+### Changed
+- Tidewater de-generification (ITER_19): stripped the ITER_18 garnish layer (atmosphere, gradients, glows, entrance motion, hover-lift, uniform radii) while keeping the palette, colour roles, and VSCode bridge — the terracotta enabled-edge is now the single decorated element. Adds the two-tone fader mark to both headers and a generated marketplace icon (`media/icon.png` supersedes the ITER_08 root `icon.png`) (f1b94e8)
+- Inline scripts of both surfaces extracted into small classic JS files (`html/js/*`, `vscode-extension/webview/js/*`); `server.py` gains a path-safe `/js/` route and `extension.js` substitutes `__JS_BASE__` (f1b94e8)
+- Brand mark extracted to a shared `icon.svg` per surface, replacing the inline header SVG and data-URI favicon — the HTML page references it via external `<use>` (theme-reactive, doubles as favicon via `var()` fallbacks), the webview inlines it through an `__ICON_SVG__` placeholder; `html/icon.svg` is canonical and synced by `make sync-css` (6d7f5d5)
+
+### Fixed
+- `scripts/sync-css.ps1` paths anchored to the script root so the npm `prepackage` hook works when invoked from `vscode-extension/` (6d7f5d5)
+
 ## [0.8.0] - 2026-06-07
 
 ### Changed
