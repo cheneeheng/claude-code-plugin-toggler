@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-06-12
+
+### Fixed
+- Webview brand mark missing in packaged installs: the single-occurrence `__ICON_SVG__` string replace in `extension.js` matched the token inside the explanatory HTML comment instead of the `<h1>` placeholder, leaving the literal token in the header. The comment no longer contains the token and the replace is now global with a function replacement (guards `$`-patterns in the SVG)
+
 ## [0.9.0] - 2026-06-10
 
 ### Changed
