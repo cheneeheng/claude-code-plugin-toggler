@@ -668,7 +668,7 @@ class SkillsViewProvider {
     let html = fs.readFileSync(panelHtmlPath.fsPath, "utf8");
     html = html.replace("__STYLES_URI__", stylesUri.toString());
     html = html.replace(/__JS_BASE__/g, jsBaseUri.toString());
-    html = html.replace("__ICON_SVG__", iconSvg);
+    html = html.replace(/__ICON_SVG__/g, () => iconSvg);
     return html;
   }
 }
